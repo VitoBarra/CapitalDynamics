@@ -1,6 +1,7 @@
 """Spacious section-local policy forms, stable during live chart refreshes."""
 from typing import Any
 import streamlit as st
+from budget import LEGACY_FIELDS, POLICIES
 
 POLICY_FIELDS: dict[str, list[tuple[Any, ...]]] = {'private_investments': [('gain_prob', 'Private opportunity event probability', 0.0, 1.0, 0.05),
                          ('gain_fraction',
@@ -149,7 +150,7 @@ def current_simulation():
     """Fragments and callbacks can run without the app's page-load migration."""
     import importlib
     import simulation as model
-    if not hasattr(model, "wealth_tax_rates"):
+    if not hasattr(model.SimulationConfig, "budget_mode"):
         model = importlib.reload(model)
     restored = model.restore_simulation(st.session_state.simulation)
     st.session_state.simulation = restored
@@ -164,10 +165,15 @@ def sync_policy_controls():
             st.session_state[f"config_{spec[0]}"] = getattr(config, spec[0])
     st.session_state.config_healthcare_choice_mode = config.healthcare_choice_mode
     st.session_state.policy_notices = {}
+    st.session_state.budget_notice = None
+    for name in LEGACY_FIELDS:
+        st.session_state[f"budget_percent_{name}"] = float(getattr(config, name) * 100)
 
 
 def apply_policy(group):
-    changes = {spec[0]: st.session_state[f"config_{spec[0]}"] for spec in POLICY_FIELDS[group]}
+    config = current_simulation().config
+    changes = {spec[0]: st.session_state[f"config_{spec[0]}"] for spec in POLICY_FIELDS[group]
+               if config.budget_mode != "Total budget" or spec[0] not in LEGACY_FIELDS}
     if group == "private_healthcare":
         changes["healthcare_choice_mode"] = st.session_state.config_healthcare_choice_mode
     notices = st.session_state.setdefault("policy_notices", {})
@@ -224,13 +230,22 @@ COMPACT_LABELS = {
 def policy_controls(group, title):
     config = current_simulation().config
     with st.expander(title, icon=":material/tune:", key=f"policy_menu_{group}"):
+        if group == "ubi" and config.budget_mode == "Total budget":
+            st.caption(f"UBI allocation: {config.direct_redistribution_fraction:.0%} of the total policy budget. "
+                       "Edit all allocation percentages together under Government budget and taxes.")
+            return
         st.caption("Adjust the settings, then apply this policy. Changes take effect next step and preserve the current economy.")
         with st.form(f"policy_{group}", border=False, enter_to_submit=False):
             if group == "private_healthcare":
                 st.session_state.setdefault("config_healthcare_choice_mode", config.healthcare_choice_mode)
                 st.selectbox("Care choice", ["Adaptive", "Public only", "Private if affordable"],
                              key="config_healthcare_choice_mode")
-            specs = POLICY_FIELDS[group]
+            specs = [spec for spec in POLICY_FIELDS[group]
+                     if config.budget_mode != "Total budget" or spec[0] not in LEGACY_FIELDS]
+            for name, policy in zip(LEGACY_FIELDS, POLICIES):
+                if config.budget_mode == "Total budget" and any(spec[0] == name for spec in POLICY_FIELDS[group]):
+                    st.caption(f"{policy} allocation: {getattr(config, name):.0%} of the total policy budget. "
+                               "Edit all percentages together under Government budget and taxes.")
             for index in range(0, len(specs), 2):
                 columns = st.columns(2, gap="medium", vertical_alignment="bottom")
                 for column, spec in zip(columns, specs[index:index + 2]):
@@ -247,3 +262,34 @@ def policy_controls(group, title):
         if notice:
             ok, message = notice
             (st.success if ok else st.error)(message)
+
+
+def apply_budget():
+    changes = {name: st.session_state[f"budget_percent_{name}"] / 100 for name in LEGACY_FIELDS}
+    try:
+        current_simulation().update_policy(budget_mode="Total budget", **changes)
+    except (ValueError, TypeError) as error:
+        st.session_state.budget_notice = (False, str(error))
+    else:
+        st.session_state.budget_notice = (True, "Budget allocations apply from the next step.")
+        for name, value in changes.items():
+            st.session_state[f"config_{name}"] = value
+
+
+def budget_controls():
+    config = current_simulation().config
+    with st.expander("Budget allocation settings", icon=":material/tune:"):
+        st.caption("All percentages use opening government funds plus taxes collected this step. "
+                   "Estates received after spending are available next step. Unused allocations remain in the budget.")
+        if config.budget_mode != "Total budget":
+            st.warning("This scenario still uses sequential legacy spending. Applying this form explicitly switches "
+                       "future steps to total-budget percentages; existing history is unchanged.")
+        with st.form("budget_allocation", enter_to_submit=False):
+            for name, policy in zip(LEGACY_FIELDS, POLICIES):
+                key = f"budget_percent_{name}"
+                st.session_state.setdefault(key, float(getattr(config, name) * 100))
+                st.number_input(f"{policy} allocation (% of total budget)", 0.0, 100.0, step=1.0, key=key)
+            st.form_submit_button("Apply budget allocation", key="apply_budget", on_click=apply_budget, width="stretch")
+        notice = st.session_state.get("budget_notice")
+        if notice:
+            (st.success if notice[0] else st.error)(notice[1])

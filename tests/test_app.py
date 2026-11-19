@@ -29,7 +29,8 @@ class AppTests(unittest.TestCase):
         app.number_input(key='config_mortality_doubling_years').set_value(8.0)
         app.button(key='apply_demographics').click().run()
         self.assertEqual(app.session_state.simulation.config.mortality_doubling_years, 8.0)
-        app.number_input(key='config_healthcare_spending_fraction').set_value(0.5)
+        app.number_input(key='budget_percent_healthcare_spending_fraction').set_value(35.0)
+        app.button(key='apply_budget').click().run()
         app.number_input(key='config_healthcare_response_rate').set_value(1.0)
         app.button(key='apply_healthcare').click().run()
         app.number_input(key='config_tau_base').set_value(0.01)
@@ -44,8 +45,9 @@ class AppTests(unittest.TestCase):
 
     def test_pension_and_private_care_controls_affect_personal_wealth(self):
         app = self.app()
+        app.number_input(key='budget_percent_pension_budget_fraction').set_value(30.0)
+        app.button(key='apply_budget').click().run()
         app.number_input(key='config_retirement_age').set_value(0)
-        app.number_input(key='config_pension_budget_fraction').set_value(0.5)
         app.button(key='apply_pensions').click().run()
         app.number_input(key='config_tau_base').set_value(0.01)
         app.button(key='apply_taxes').click().run()
@@ -78,8 +80,10 @@ class AppTests(unittest.TestCase):
         self.assertGreater(before.history[-1]['Tax revenue'], 0)
         self.assertEqual(before.policy_changes[-1]['Effective step'], old_step + 1)
         app.button(key='toggle_live').click().run()
-        app.number_input(key='config_healthcare_spending_fraction').set_value(0.8)
-        app.button(key='apply_healthcare').click().run()
+        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(0.0)
+        app.number_input(key='budget_percent_pension_budget_fraction').set_value(0.0)
+        app.number_input(key='budget_percent_healthcare_spending_fraction').set_value(80.0)
+        app.button(key='apply_budget').click().run()
         self.assertEqual(before.step_count, old_step + 1)
         self.assertEqual(before.config.healthcare_spending_fraction, 0.8)
         self.assertFalse(app.session_state.running)
@@ -140,10 +144,15 @@ class AppTests(unittest.TestCase):
             index = next(i for i, n in enumerate(nodes) if n.type == 'metric' and n.label == label)
             self.assertLess(heading('UBI and pensions'), index)
             self.assertLess(index, heading('Healthcare, aging and mortality'))
-        for key in ('config_direct_redistribution_fraction', 'config_retirement_age', 'config_pension_budget_fraction', 'config_pension_per_person'):
+        for key in ('config_retirement_age', 'config_pension_per_person'):
             index = next(i for i, n in enumerate(nodes) if n.type == 'number_input' and n.key == key)
             self.assertLess(heading('UBI and pensions'), index)
             self.assertLess(index, heading('Healthcare, aging and mortality'))
+        for key in ('budget_percent_direct_redistribution_fraction', 'budget_percent_pension_budget_fraction',
+                    'budget_percent_healthcare_spending_fraction', 'budget_percent_investment_budget_fraction'):
+            index = next(i for i, n in enumerate(nodes) if n.type == 'number_input' and n.key == key)
+            self.assertLess(heading('Government budget and taxes'), index)
+            self.assertLess(index, heading('UBI and pensions'))
         self.assertTrue(any(n.value == 'Current wealth tax curve' for n in app.subheader))
         self.assertTrue(any(n.label == 'UBI per person' for n in app.metric))
 
@@ -151,13 +160,13 @@ class AppTests(unittest.TestCase):
         app = self.app()
         sim = app.session_state.simulation
         original_ubi = sim.config.direct_redistribution_fraction
-        app.number_input(key='config_direct_redistribution_fraction').set_value(0.4)
+        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(40.0)
         app.number_input(key='config_tau_base').set_value(0.01)
         app.button(key='apply_taxes').click().run()
         self.assertEqual(sim.config.tau_base, 0.01)
         self.assertEqual(sim.config.direct_redistribution_fraction, original_ubi)
-        app.number_input(key='config_direct_redistribution_fraction').set_value(0.4)
-        app.button(key='apply_ubi').click().run()
+        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(40.0)
+        app.button(key='apply_budget').click().run()
         self.assertFalse(app.exception)
         self.assertEqual(sim.config.direct_redistribution_fraction, 0.4)
         self.assertEqual(sim.config.tau_base, 0.01)
@@ -186,6 +195,21 @@ class AppTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(app.session_state.simulation.seed, 425)
 
+    def test_budget_percentages_validate_together(self):
+        app = self.app()
+        sim = app.session_state.simulation
+        original = sim.config
+        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(90.0)
+        app.button(key='apply_budget').click().run()
+        self.assertEqual(sim.config, original)
+        self.assertTrue(any('100%' in e.value for e in app.error))
+        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(10.0)
+        app.number_input(key='budget_percent_healthcare_spending_fraction').set_value(40.0)
+        app.button(key='apply_budget').click().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(sim.config.healthcare_spending_fraction, .4)
+        self.assertEqual(sim.config.direct_redistribution_fraction, .1)
+
     def test_dashboard_supports_fragment_only_refreshes(self):
         source = (Path(__file__).resolve().parents[1] / 'app.py').read_text()
         source += '\n\ndef refresh_dashboard():\n    st.rerun("dashboard")\n'
@@ -194,12 +218,12 @@ class AppTests(unittest.TestCase):
         self.assertFalse(app.exception)
         app.button(key='test_refresh').click().run()
         self.assertFalse(app.exception)
-        self.assertEqual(len(app.get('vega_lite_chart')), 15)
+        self.assertEqual(len(app.get('vega_lite_chart')), 16)
 
     def test_batch_live_pause_resume_and_reset(self):
         app = self.app()
         self.assertFalse(app.exception)
-        self.assertEqual(len(app.get('vega_lite_chart')), 15)
+        self.assertEqual(len(app.get('vega_lite_chart')), 16)
         app.number_input(key='batch_steps').set_value(5)
         app.button(key='advance').click().run()
         self.assertEqual(app.session_state.simulation.step_count, 5)

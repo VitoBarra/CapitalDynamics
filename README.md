@@ -1,6 +1,6 @@
 # Capital Dynamics
 
-Capital Dynamics is an interactive simulator for exploring wealth and population in a simplified capitalist economy. Individuals hold private wealth, experience growth and random gains or losses, pay wealth-based taxes, and pass wealth to their children. Public policy and demographic changes influence how that wealth evolves.
+Capital Dynamics is an interactive economy sandbox with two separate models: a legacy wealth-growth simulation and an experimental monetary economy with production, prices, government bonds, banking and money issuance. Both include taxes, UBI, pensions, healthcare and demographics. These are exploratory models, not forecasts.
 
 ## Getting started
 
@@ -33,6 +33,18 @@ Command-line overrides take priority over `.env.local`, for example `make run PO
 
 ## Run a scenario
 
+Choose **Legacy economy** or **Monetary economy** in the sidebar. Switching pauses live playback and preserves each model's economy separately; legacy wealth is never silently converted into money and assets. The monetary model replaces the wealth cap with productive capacity. Its sidebar includes six reproducible comparison scenarios; start with **Individual credit**, **Government bonds** or **Monetary financing** to explore those features. See [Monetary model accounting and assumptions](docs/monetary-model.md) for its controls, step sequence, limitations and money definitions.
+
+### Shared-budget allocation
+
+Fresh dashboard scenarios allocate **percentages of the same total government budget**, not the remaining balance after another policy. Edit all percentages together under **Government budget and taxes → Budget allocation settings**, then select **Apply budget allocation**. Totals above 100% are rejected without changing active policies. Unallocated and unused funds remain with government; unused pension funding does not increase healthcare or investment allocations.
+
+The labeled allocation bar includes unallocated funds and totals 100%. A separate actual-expenditure bar uses actual payments as its denominator. Tables show allocated, spent and unused amounts and actual spending percentages, using matching policy colors. Charts describe the last recorded step; active policy changes apply next step. The monetary economy also reserves a separate debt-service allocation from this same total, so borrowing obligations never silently change other policies' percentage denominator.
+
+Existing sequential legacy sessions keep their old semantics and display a warning. Applying the allocation form explicitly switches future steps to the shared-budget method without rewriting history. The Python `SimulationConfig` API retains sequential defaults for backward compatibility; pass `budget_mode="Total budget"` to opt in.
+
+### Legacy economy
+
 The simulator starts with 100 people, one wealth unit each, and capacity for 200 wealth units. Defaults favor moderate growth, a functioning public budget and slower demographic change. They are exploratory model settings, not estimates for a real economy. Existing sessions keep their parameters; the sidebar's **Load default scenario** button starts a fresh run with the revised defaults.
 
 - **Batch:** choose how many steps to advance and select **Advance simulation**. Repeating this continues the same economy.
@@ -48,7 +60,8 @@ The sidebar separates **Scenario** setup from **Display** options. Policy panels
 | --- | --- |
 | Current wealth distribution | Private opportunity probabilities, gains, investment risk and random losses. |
 | Economy over time | Growth, wealth growth effect, capacity depreciation and public investment. |
-| Government spending and UBI | Tax rates, progressivity, Universal Basic Income (UBI), pension eligibility and pension funding. |
+| Government budget and taxes | Tax rates, progressivity, joint budget allocation percentages and spending breakdown. |
+| UBI and pensions | Equal UBI payments, pension eligibility, target payments and pension shortfalls. |
 | Healthcare, aging and mortality | Public healthcare funding and effectiveness; private premiums, quality, affordability and personal choice. |
 | Population age distribution | Births, background mortality, adult reference hazard and mortality doubling time. No maximum age. |
 
@@ -88,12 +101,12 @@ Under **Detailed data and downloads**, inspect individual wealth, age, parent ID
 | Base growth / wealth effect | 4% / alpha 0 | Moderate growth without the previous negative-alpha singularity. |
 | Wealth taxes per step | 0.5% minimum, 4% maximum, gamma 2 | A public revenue stream even when wealth is equal; these are wealth taxes, not income tax rates. |
 | UBI allocation | 25% of available government funds | Equal transfers with funds left for pensions, care and investment. |
-| Pensions | Age 65; target 0.02 wealth units; up to 20% of remaining funds | Budget-limited pension payments. |
-| Public healthcare | 25% of remaining funds; effectiveness 10 | Material funding with gradual effects. |
+| Pensions | Age 65; target 0.02 wealth units; up to 20% of the common budget | Budget-limited pension payments. |
+| Public healthcare | 25% of the common budget; effectiveness 10 | Material funding with gradual effects. |
 | Private opportunities | 25% event chance; 15% of people; 10% gain | Moderate opportunity-driven variation. |
 | Private investment risk | 15% chance of losing 10% of wealth | Downside risk without the former large losses. |
 | Independent losses | 15% event chance; 10% of people; up to 10% loss | Less abrupt private wealth destruction. |
-| Public investment / depreciation | 20% event chance / 0.05% capacity loss | Slower capacity erosion. |
+| Public investment / depreciation | 15% common-budget allocation; 20% event chance / 0.05% capacity loss | Unused investment funding is retained. |
 | Birth peak / background mortality / adult reference hazard | 3% / 0.02% / 0.003 at age 50 | Random annual deaths; adult hazard doubles every 7 years, with no lifespan cutoff. |
 | Private premium / mortality factor | 0.008 initial wealth / 0.5 | Paid health benefits with an affordability tradeoff. |
 
@@ -113,7 +126,7 @@ Current model parameters are available in grouped controls:
 | Public investment | Investment probability, capacity depreciation (`delta`), return exponent (`beta`), base efficiency, random shock magnitude, failed investment damage and success sensitivity (`psi`). |
 | Pensions and UBI | Retirement eligibility age, pension budget fraction, desired pension per retiree in multiples of initial wealth. |
 | Private healthcare | Choice strategy, premium, age surcharge, mortality risk factor, affordability limit and health-versus-wealth preference. |
-| Healthcare and aging | Share of remaining public funds spent on healthcare, effectiveness, adjustment speed and minimum mortality hazard fraction. |
+| Healthcare and aging | Common-budget healthcare allocation, effectiveness, adjustment speed and minimum mortality hazard fraction. |
 | Demographics | Maximum birth probability, background death probability, adult reference age and hazard, mortality doubling time. |
 | Display | Percentile groups (originally `tick_count`), age bins and units, history window, individual wealth visibility and logarithmic scale. |
 
@@ -132,9 +145,9 @@ closing budget = opening budget + taxes + estates
                  - UBI - pensions - public healthcare - capacity investment
 ```
 
-Allocations use the remaining budget in that order. Fractions are sequential, rather than percentages of one shared original budget. The government does not borrow. Estate revenue arrives after spending and is available for the next step. The dashboard shows the expenditure mix over time, the latest breakdown, and an account reconciliation; the finance CSV includes all retained steps.
+Fresh dashboard scenarios freeze allocations from opening funds plus taxes before paying any policy. Each percentage uses that same total; unused allocations stay in government funds. Investment is limited to its own allocation, even when pensions have unused funds. Existing sequential scenarios retain remaining-budget behavior until explicitly switched in the allocation form. The legacy government does not borrow; use Monetary economy for bonds and issuance. Estate revenue arrives after spending and is available next step.
 
-Universal Basic Income (UBI) replaces the earlier inverse-wealth redistribution. Each step, 25% of available government funds is divided equally among all current residents, including children and retirees. The amount is deducted from the government budget and added to each person's wealth. With no public funds, the payment is zero; no money is created or borrowed. It is a variable budget-funded payment rather than a fixed guaranteed entitlement. Historical transfer totals from older sessions keep their amounts when renamed; old per-person receipts cannot be reconstructed. Pensions add an age-based payment: people aged 65 and above qualify by default, regardless of wealth. Desired pensions are 0.02 times initial wealth per retiree per step, funded with at most 20% of the funds remaining after UBI. If the budget is insufficient, every retiree receives the same reduced payment; unmet entitlement is reported as a shortfall and is not carried as debt. Without retirees, pension funds remain available for later uses. Pension transfers increase personal wealth before healthcare choices. Retirees can receive both UBI and pensions.
+Universal Basic Income (UBI) divides its allocation equally among all current residents, including children and retirees. With no public funds, payment is zero. It is a variable budget-funded payment rather than a fixed guaranteed entitlement. Pensions add an age-based payment: people aged 65 and above qualify by default. Desired pensions are 0.02 times initial wealth per retiree per step, limited to the pension allocation (20% of the common budget by default). Underfunding reduces payments equally and is reported as a shortfall, not carried as debt. Unused pension funds are retained. Retirees can receive both UBI and pensions.
 
 ### Private healthcare and personal decisions
 
@@ -158,7 +171,7 @@ Premiums become assets of an aggregate private healthcare provider sector. They 
 
 ### Healthcare, mortality and aging
 
-By default, 25% of the government budget remaining after UBI and pensions is spent on healthcare each step, before capacity investment. The payment leaves the government budget. Spending per person is divided by initial wealth per person so effects scale with the scenario's wealth units.
+By default, 25% of the common government budget is allocated to healthcare. Older sequential scenarios instead use remaining funds. The payment leaves the government budget. Spending per person is divided by initial wealth per person so effects scale with the scenario's wealth units.
 
 Healthcare creates a target mortality multiplier:
 
@@ -190,12 +203,16 @@ The Gompertz-style adult curve, infant excess and young-adult hump approximate t
 
 Birth probability depends on age, is nonzero at ages 14–68, and peaks at age 30. A parent transfers half their wealth when a child is born. On death, wealth passes to children in the population, or to the government when there are none. Stable person IDs preserve family links as the population changes.
 
-This is an exploratory toy model, not a forecast or a complete representation of capitalism. It does not currently model firms, wages, prices, trade, debt, or markets. For age and mortality, a step is one year; economic rates remain illustrative per-step settings.
+This legacy model does not model wages, prices, banking or debt. The separate monetary model adds simplified production, wages, prices and financial accounts, but neither model is a forecast or a complete representation of capitalism. For age and mortality, a step is one year; economic rates remain illustrative settings.
 
 ## Project files
 
 - `app.py`: Streamlit controls, playback and interactive charts.
 - `simulation.py`: Stateful model shared by batch and live runs.
 - `policy_controls.py`: Section-local policy forms and live policy submission.
+- `budget.py` / `budget_ui.py`: Common-total allocation validation and percentage visualizations.
+- `monetary.py`: Monetary model, deposits, productive assets, loans, bonds, issuance and sector accounts.
+- `monetary_ui.py`: Monetary policies, batch/live dashboard, presets and downloads.
+- `docs/monetary-model.md`: Monetary accounting rules, annual sequence and model limitations.
 - `PopolationEconomicSimulation.py`: Original Matplotlib animation, retained as a reference. Its Matplotlib dependency is separate from the Streamlit app's requirements.
 - `tests/`: Model and interface regression checks.

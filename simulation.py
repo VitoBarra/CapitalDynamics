@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace, fields
 import random
 import math
 import numpy as np
+from budget import LEGACY_FIELDS, allocate, validate_allocations
 
 @dataclass
 class Individual:
@@ -62,6 +63,10 @@ class SimulationConfig:
     private_healthcare_mortality_factor: float = 0.5
     private_healthcare_max_wealth_fraction: float = 0.2
     healthcare_choice_priority: float = 4.0
+    # The Python API retains sequential behavior for older scripts. The UI opts
+    # new scenarios into total-budget allocation explicitly.
+    budget_mode: str = "Sequential (legacy)"
+    investment_budget_fraction: float = 0.15
 
 
 def gini_coefficient(wealths):
@@ -96,6 +101,8 @@ def wealth_tax_rates(wealths, config):
 class Simulation:
     def __init__(self, config=None, seed=42, history_limit=10000):
         self.config = config or SimulationConfig()
+        if self.config.budget_mode == "Total budget":
+            validate_allocations([getattr(self.config, name) for name in LEGACY_FIELDS])
         self.initial_config = self.config
         self.policy_changes = deque(maxlen=1000)
         self.seed = seed
@@ -119,6 +126,8 @@ class Simulation:
         self.deaths = 0
         self.observed_mortality = 0.0
         self.private_healthcare_balance = 0.0
+        self.policy_budget = 0.0
+        self.budget_allocations = {}
         self.reset_accounts()
         self.history = deque(maxlen=history_limit)
         self.record()
@@ -153,6 +162,12 @@ class Simulation:
             "Private healthcare premiums": self.private_healthcare_revenue,
             "Private healthcare sector balance": self.private_healthcare_balance,
             "Total private sector wealth": float(wealths.sum()) + self.private_healthcare_balance,
+            "Policy budget": self.policy_budget,
+            "Budget mode": self.config.budget_mode,
+            **{f"{name} allocated": self.budget_allocations.get(name, 0.0)
+               for name in ("UBI", "Pensions", "Healthcare", "Public investment")},
+            **{f"{name} allocation fraction": getattr(self.config, field)
+               for name, field in zip(("UBI", "Pensions", "Healthcare", "Public investment"), LEGACY_FIELDS)},
         })
 
     def update_policy(self, **changes):
@@ -171,8 +186,13 @@ class Simulation:
             "death_base_prob", "birth_prob_max", "healthcare_spending_fraction",
             "healthcare_response_rate", "mortality_floor_fraction", "pension_budget_fraction",
             "private_healthcare_mortality_factor", "private_healthcare_max_wealth_fraction",
+            "investment_budget_fraction",
         }
         for name, value in changes.items():
+            if name == "budget_mode":
+                if value not in {"Total budget", "Sequential (legacy)"}:
+                    raise ValueError("Choose a valid budget mode.")
+                continue
             if name == "healthcare_choice_mode":
                 if value not in {"Adaptive", "Public only", "Private if affordable"}:
                     raise ValueError("Choose a valid healthcare strategy.")
@@ -189,6 +209,8 @@ class Simulation:
             raise ValueError("The maximum tax rate must be at least the minimum tax rate.")
         if candidate.mortality_doubling_years <= 0 or candidate.tau_gamma <= 0:
             raise ValueError("Mortality doubling time and tax progressivity must be positive.")
+        if candidate.budget_mode == "Total budget":
+            validate_allocations([getattr(candidate, name) for name in LEGACY_FIELDS])
         changed = {name: value for name, value in changes.items() if value != getattr(self.config, name)}
         if not changed:
             return False
@@ -232,7 +254,7 @@ class Simulation:
     def pay_ubi(self):
         """Pay every current resident the same amount from existing government funds."""
         self.ubi_recipients = len(self.population)
-        self.ubi_spending = self.government_budget * self.config.direct_redistribution_fraction if self.population else 0.0
+        self.ubi_spending = self.policy_amount("UBI", self.config.direct_redistribution_fraction) if self.population else 0.0
         self.ubi_payment_per_person = self.ubi_spending / self.ubi_recipients if self.ubi_recipients else 0.0
         self.government_budget -= self.ubi_spending
         for person in self.population:
@@ -243,7 +265,7 @@ class Simulation:
         retirees = [p for p in self.population if p.age >= self.config.retirement_age]
         self.pension_eligible = len(retirees)
         requested = len(retirees) * self.config.pension_per_person * self.config.init_wealth
-        self.pension_spending = min(requested, self.government_budget * self.config.pension_budget_fraction)
+        self.pension_spending = min(requested, self.policy_amount("Pensions", self.config.pension_budget_fraction))
         self.pension_shortfall = requested - self.pension_spending
         self.government_budget -= self.pension_spending
         payment = self.pension_spending / len(retirees) if retirees else 0.0
@@ -295,7 +317,7 @@ class Simulation:
 
     def update_healthcare(self):
         """Spend remaining public funds and gradually adjust mortality protection."""
-        self.healthcare_spending = self.government_budget * self.config.healthcare_spending_fraction
+        self.healthcare_spending = self.policy_amount("Healthcare", self.config.healthcare_spending_fraction)
         self.government_budget -= self.healthcare_spending
         per_person = self.healthcare_spending / max(len(self.population), 1)
         # Scale spending relative to the scenario's initial wealth units.
@@ -329,6 +351,16 @@ class Simulation:
         )
         hazard = (background + aging) * protection
         return min(-math.expm1(-hazard), math.nextafter(1.0, 0.0))
+
+    def prepare_budget(self):
+        self.policy_budget = self.government_budget
+        self.budget_allocations = (allocate(self.policy_budget, [getattr(self.config, name) for name in LEGACY_FIELDS])
+                                   if self.config.budget_mode == "Total budget" else {})
+
+    def policy_amount(self, name, sequential_fraction):
+        if self.config.budget_mode == "Total budget":
+            return self.budget_allocations.get(name, 0.0)
+        return self.government_budget * sequential_fraction
 
     def step(self):
         if not self.population:
@@ -378,12 +410,14 @@ class Simulation:
         self.tax_revenue = float(taxes.sum())
         self.effective_tax_rate = self.tax_revenue / float(wealths.sum()) if wealths.sum() else 0.0
         self.government_budget += self.tax_revenue
+        self.prepare_budget()
         self.pay_ubi()
         self.pay_pensions()
         self.update_healthcare()
         self.choose_healthcare()
         if self.rng.rand() < self.config.investment_probability and self.government_budget > 1:
-            investment = self.rng.rand() * self.government_budget
+            investment = (self.budget_allocations["Public investment"] if self.config.budget_mode == "Total budget"
+                          else self.rng.rand() * self.government_budget)
             invest_ratio = investment / (self.government_budget + 1e-09)
             p_success = 1 / (1 + np.exp(-self.config.psi * (invest_ratio - 0.5)))
             eff_core = self.config.base_eff + 0.8 * invest_ratio
@@ -454,7 +488,7 @@ def simulate(steps=100, seed=42, **parameters):
 
 def restore_simulation(previous):
     """Upgrade a saved session without restarting its economy or random sequence."""
-    required = ("policy_changes", "initial_config", "private_healthcare_balance", "ubi_payment_per_person")
+    required = ("policy_changes", "initial_config", "private_healthcare_balance", "ubi_payment_per_person", "policy_budget")
     if isinstance(previous, Simulation) and all(hasattr(previous, name) for name in required):
         return previous
     from dataclasses import asdict

@@ -6,7 +6,7 @@ import importlib
 import simulation as simulation_model
 
 # A running Streamlit process may still hold the pre-upgrade model module.
-if not hasattr(simulation_model, "wealth_tax_rates"):
+if not hasattr(simulation_model.SimulationConfig, "budget_mode"):
     importlib.reload(simulation_model)
 
 import altair as alt
@@ -15,7 +15,9 @@ import pandas as pd
 import streamlit as st
 
 from simulation import Simulation, SimulationConfig, relative_wealth, tax_rates_at_relative_wealth, wealth_tax_rates
-from policy_controls import policy_controls, sync_policy_controls, current_simulation
+from policy_controls import policy_controls, sync_policy_controls, current_simulation, budget_controls
+from budget import LEGACY_FIELDS, POLICIES, COLORS
+from budget_ui import allocation_view
 
 # Every person remains available even in scenarios larger than Altair's default limit.
 alt.data_transformers.disable_max_rows()
@@ -25,7 +27,20 @@ st.title("Capital Dynamics")
 st.caption("Economy sandbox")
 st.write("Explore how investment, public policy and demographics shape wealth over time.")
 
-DEFAULT_CONFIG = SimulationConfig()
+def pause_models():
+    st.session_state.running = False
+    st.session_state.monetary_running = False
+
+
+economic_model = st.sidebar.segmented_control("Economic model", ["Legacy economy", "Monetary economy"],
+    default="Legacy economy", key="economic_model", on_change=pause_models) or "Legacy economy"
+if economic_model == "Monetary economy":
+    from monetary_ui import monetary_workspace
+    monetary_workspace()
+    st.stop()
+
+st.caption("Legacy wealth sandbox · Switch to Monetary economy in the sidebar for production, banking, debt and inflation.")
+DEFAULT_CONFIG = SimulationConfig(budget_mode="Total budget")
 if "simulation" not in st.session_state:
     st.session_state.simulation = Simulation(DEFAULT_CONFIG)
     st.session_state.running = False
@@ -166,11 +181,12 @@ with st.container(border=True):
     st.header("Government budget and taxes")
     st.caption("Track tax revenue, the government balance and expenditure by purpose.")
     policy_controls("taxes", "Tax settings")
+    budget_controls()
     government_slot = st.container()
 
 with st.container(border=True):
     st.header("UBI and pensions")
-    st.caption("Budget priority: UBI → pensions → public healthcare → capacity investment.")
+    st.caption("Total-budget allocations are independent of section order. Legacy sequential scenarios are explicitly labeled.")
     policy_controls("ubi", "UBI settings")
     policy_controls("pensions", "Pension settings")
     transfers_slot = st.container()
@@ -286,6 +302,16 @@ def dashboard():
         a.metric("Government budget", f'{last["Government budget"]:,.2f}', border=True)
         b.metric("Tax revenue this step", f'{last["Tax revenue"]:,.2f}', border=True)
         c.metric("Government spending this step", f'{last["Total government spending"]:,.2f}', border=True)
+        if sim.config.budget_mode == "Total budget" and last["Budget mode"] == "Total budget":
+            allocation_view(float(last["Policy budget"]), [last[f"{name} allocation fraction"] for name in POLICIES],
+                dict(zip(POLICIES, [last[name] for name in ("UBI transfers", "Pension spending", "Healthcare spending", "Capacity investment")])),
+                title="Policy budget allocation", key="legacy")
+            st.caption("The bar and amounts describe the last recorded step. Active settings above apply next step.")
+        elif sim.config.budget_mode != "Total budget":
+            st.warning("Sequential legacy allocation: pensions and healthcare still use remaining funds. "
+                       "Use Budget allocation settings to explicitly switch this scenario to total-budget allocation.")
+        else:
+            st.info("Total-budget allocation is enabled for the next step. Advance to record its first spending breakdown.")
         line_chart(trends, ["Government budget"], "Government budget")
         left, right = st.columns(2)
         with left:
@@ -314,15 +340,19 @@ def dashboard():
             st.subheader("Government spending over time")
             spending_chart = alt.Chart(spending, mark=alt.MarkDef(type="area")).encode(
                 x=alt.X("Step:Q", title="Simulation step"), y=alt.Y("Spending:Q", stack="zero"),
-                color="Purpose:N", tooltip=["Step:Q", "Purpose:N", alt.Tooltip("Spending:Q", format=",.4f")],
+                color=alt.Color("Purpose:N", scale=alt.Scale(domain=spending_columns, range=COLORS[:4])),
+                tooltip=["Step:Q", "Purpose:N", alt.Tooltip("Spending:Q", format=",.4f")],
             ).properties(height=240)
             st.altair_chart(spending_chart, width="stretch", alt="Government spending by UBI, pensions, public healthcare and capacity investment")
         with right:
             st.subheader("Latest spending breakdown")
             latest_spending = pd.DataFrame({"Purpose": spending_columns, "Spending": [last[name] for name in spending_columns]})
+            latest_spending["Expenditure share"] = latest_spending.Spending / latest_spending.Spending.sum() if latest_spending.Spending.sum() else 0
             spending_bars = alt.Chart(latest_spending, mark=alt.MarkDef(type="bar")).encode(
-                x="Spending:Q", y=alt.Y("Purpose:N", sort=spending_columns), color=alt.Color("Purpose:N", legend=None),
-                tooltip=["Purpose:N", alt.Tooltip("Spending:Q", format=",.4f")],
+                x=alt.X("Expenditure share:Q", axis=alt.Axis(format=".0%"), scale=alt.Scale(domain=[0, 1]), title="% of actual expenditure"),
+                y=alt.Y("Purpose:N", sort=spending_columns),
+                color=alt.Color("Purpose:N", legend=None, scale=alt.Scale(domain=spending_columns, range=COLORS[:4])),
+                tooltip=["Purpose:N", alt.Tooltip("Spending:Q", format=",.4f"), alt.Tooltip("Expenditure share:Q", format=".1%")],
             ).properties(height=240)
             st.altair_chart(spending_bars, width="stretch", alt="Latest government expenditure by purpose")
         ledger_rows = ["Opening government budget", "Tax revenue", "Estate revenue", *spending_columns,
@@ -336,7 +366,8 @@ def dashboard():
         a, b = st.columns(2)
         a.metric("UBI spending this step", f'{last["UBI transfers"]:,.2f}', border=True)
         b.metric("UBI per person", f'{last["UBI per person"]:,.4f}', border=True)
-        st.caption("Universal Basic Income (UBI) is the same payment for every resident, deducted from government funds before pensions, public healthcare and capacity investment.")
+        st.caption("Universal Basic Income (UBI) is the same payment for every resident. With total-budget allocation, "
+                   "its funding is reserved independently of pensions, healthcare and investment.")
         a, b = st.columns(2)
         a.metric("Pension spending", f"{last['Pension spending']:,.2f}", border=True)
         b.metric("Unfunded pension entitlement", f"{last['Pension shortfall']:,.2f}", border=True)
