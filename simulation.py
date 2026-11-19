@@ -19,7 +19,7 @@ class Individual:
 
 @dataclass(frozen=True)
 class SimulationConfig:
-    pop_size: int = 300
+    pop_size: int = 100
     init_wealth: float = 1.0
     base_growth: float = 0.04
     gain_prob: float = 0.25
@@ -31,7 +31,7 @@ class SimulationConfig:
     loss_fraction: float = 0.1
     loss_rate: float = 0.1
     tick_count: int = 10
-    logistic_capacity: float = 1000.0
+    logistic_capacity: float = 200.0
     alpha: float = 0.0
     tau_base: float = 0.005
     tau_max: float = 0.04
@@ -44,15 +44,15 @@ class SimulationConfig:
     shock_scale: float = 0.2
     max_neg_shock: float = 0.2
     psi: float = 2.0
-    max_age: int = 100
-    death_base_prob: float = 0.006
+    death_base_prob: float = 0.0002
     birth_prob_max: float = 0.03
     healthcare_spending_fraction: float = 0.25
     healthcare_effectiveness: float = 10.0
     healthcare_response_rate: float = 0.1
     mortality_floor_fraction: float = 0.2
     aging_risk_start: int = 50
-    aging_risk_rate: float = 0.001
+    aging_risk_rate: float = 0.003
+    mortality_doubling_years: float = 7.0
     retirement_age: int = 65
     pension_budget_fraction: float = 0.2
     pension_per_person: float = 0.02
@@ -183,12 +183,12 @@ class Simulation:
                 raise ValueError("Rates and budget fractions must be between zero and one.")
             if name != "alpha" and value < 0:
                 raise ValueError("Policy values must be non-negative.")
-            if name in {"max_age", "retirement_age", "aging_risk_start", "tick_count"} and not isinstance(value, int):
+            if name in {"retirement_age", "aging_risk_start", "tick_count"} and not isinstance(value, int):
                 raise ValueError("Age and group settings must be whole numbers.")
         if candidate.tau_base > candidate.tau_max:
             raise ValueError("The maximum tax rate must be at least the minimum tax rate.")
-        if candidate.max_age < 1 or candidate.tau_gamma <= 0:
-            raise ValueError("Maximum age and tax progressivity must be positive.")
+        if candidate.mortality_doubling_years <= 0 or candidate.tau_gamma <= 0:
+            raise ValueError("Mortality doubling time and tax progressivity must be positive.")
         changed = {name: value for name, value in changes.items() if value != getattr(self.config, name)}
         if not changed:
             return False
@@ -253,7 +253,7 @@ class Simulation:
 
     def private_premium(self, age):
         return self.config.init_wealth * self.config.private_healthcare_premium * (
-            1 + self.config.private_healthcare_age_loading * age / max(self.config.max_age, 1)
+            1 + self.config.private_healthcare_age_loading * age / 100
         )
 
     def private_death_probability(self, age, wealth):
@@ -304,15 +304,31 @@ class Simulation:
             1 + self.config.healthcare_effectiveness * funding
         )
         self.mortality_multiplier += self.config.healthcare_response_rate * (target - self.mortality_multiplier)
-        self.mortality_rate = self.config.death_base_prob * self.mortality_multiplier
+        base = self.config.death_base_prob
+        self.mortality_rate = 1.0 if base >= 1 else -math.expm1(math.log1p(-base) * self.mortality_multiplier)
 
     def death_probability(self, age, wealth, funded=True, risk_factor=None):
-        """Age raises risk; healthcare reduces baseline and age-related risks."""
-        if age >= self.config.max_age:
-            return 1.0
-        aging = self.config.aging_risk_rate * max(0, age - self.config.aging_risk_start) / (1 + wealth)
+        """Annual Bernoulli probability from a human-shaped mortality hazard.
+
+        Gompertz adult aging, infant excess and a small young-adult hump roughly
+        match the scale (not every age) of SSA's 2022 period life table. Wealth
+        affects access to private care, not biological aging directly.
+        """
+        age = max(age, 0)
         protection = (self.mortality_multiplier if funded else 1.0) if risk_factor is None else risk_factor
-        return float(np.clip((self.config.death_base_prob + aging) * protection, 0, 1))
+        if protection <= 0:
+            return 0.0
+        if self.config.death_base_prob >= 1:
+            return 1.0
+        background = -math.log1p(-self.config.death_base_prob)
+        exponent = math.log(2) * (age - self.config.aging_risk_start) / self.config.mortality_doubling_years
+        # Limit only numerical overflow, never lifespan. The tail remains random.
+        aging = self.config.aging_risk_rate * (
+            math.exp(min(exponent, 700)) + 1.8 * math.exp(-2 * age)
+            + 0.3 * math.exp(-0.5 * ((age - 25) / 10) ** 2)
+        )
+        hazard = (background + aging) * protection
+        return min(-math.expm1(-hazard), math.nextafter(1.0, 0.0))
 
     def step(self):
         if not self.population:
@@ -321,8 +337,6 @@ class Simulation:
         self.failed_investments = 0
         self.investment_losses = 0.0
         self.investment_gains = 0.0
-        for person in self.population:
-            person.age += 1
         wealths = np.array([p.wealth for p in self.population])
         total_wealth = wealths.sum()
         individual_factor = 1 / np.maximum(1 + self.config.alpha * wealths, 0.01)
@@ -399,6 +413,7 @@ class Simulation:
                     self.government_budget += person.wealth
                     self.estate_revenue += person.wealth
             else:
+                person.age += 1
                 new_population.append(person)
         self.observed_mortality = self.deaths / population_before_deaths
         self.population = new_population
@@ -443,12 +458,15 @@ def restore_simulation(previous):
     if isinstance(previous, Simulation) and all(hasattr(previous, name) for name in required):
         return previous
     from dataclasses import asdict
-    config = SimulationConfig(**asdict(previous.config))
+    known = {field.name for field in fields(SimulationConfig)}
+    config = SimulationConfig(**{key: value for key, value in asdict(previous.config).items() if key in known})
     restored = Simulation(config, seed=previous.seed)
     history_defaults = restored.history[0].copy()
     restored.__dict__.update(previous.__dict__)
     restored.config = config
-    restored.initial_config = SimulationConfig(**asdict(getattr(previous, "initial_config", config)))
+    restored.initial_config = SimulationConfig(**{
+        key: value for key, value in asdict(getattr(previous, "initial_config", config)).items() if key in known
+    })
     if not hasattr(restored, "policy_changes"):
         restored.policy_changes = deque(maxlen=1000)
     if "udb_spending" in previous.__dict__ and "ubi_spending" not in previous.__dict__:

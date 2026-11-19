@@ -25,6 +25,10 @@ class AppTests(unittest.TestCase):
 
     def test_healthcare_controls_and_age_curves(self):
         app = self.app()
+        self.assertNotIn('config_max_age', [widget.key for widget in app.number_input])
+        app.number_input(key='config_mortality_doubling_years').set_value(8.0)
+        app.button(key='apply_demographics').click().run()
+        self.assertEqual(app.session_state.simulation.config.mortality_doubling_years, 8.0)
         app.number_input(key='config_healthcare_spending_fraction').set_value(0.5)
         app.number_input(key='config_healthcare_response_rate').set_value(1.0)
         app.button(key='apply_healthcare').click().run()
@@ -139,8 +143,10 @@ class AppTests(unittest.TestCase):
         app.button(key='load_defaults').click().run()
         self.assertFalse(app.exception)
         self.assertEqual(app.session_state.simulation.step_count, 0)
-        self.assertEqual(app.session_state.simulation.config.pop_size, 300)
-        self.assertEqual(app.number_input(key='config_pop_size').value, 300)
+        self.assertEqual(app.session_state.simulation.config.pop_size, 100)
+        self.assertEqual(app.number_input(key='config_pop_size').value, 100)
+        self.assertEqual(app.session_state.simulation.config.logistic_capacity, 200.0)
+        self.assertEqual(app.number_input(key='config_logistic_capacity').value, 200.0)
         self.assertEqual(app.number_input(key='config_tau_base').value, 0.005)
 
     def test_batch_live_pause_resume_and_reset(self):

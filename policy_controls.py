@@ -130,16 +130,19 @@ POLICY_FIELDS: dict[str, list[tuple[Any, ...]]] = {'private_investments': [('gai
                          'Higher values make adaptive agents more willing to pay for health '
                          'improvements. Individual preferences vary around this value.')],
  'demographics': [('birth_prob_max', 'Maximum birth probability', 0.0, 1.0, 0.005),
-                  ('death_base_prob', 'Base death probability', 0.0, 1.0, 0.001),
-                  ('max_age', 'Maximum age', 1, 500, 1),
-                  ('aging_risk_start', 'Age when extra mortality begins', 0, 500, 1),
+                  ('death_base_prob', 'Base death probability', 0.0, 1.0, 0.0001),
+                  ('aging_risk_start', 'Adult mortality reference age', 0, 100, 1,
+                   'Reference age for the adult hazard, not an aging threshold or lifespan limit.'),
                   ('aging_risk_rate',
-                   'Additional annual-age risk',
+                   'Adult hazard at reference age',
                    0.0,
                    0.1,
                    0.001,
-                   'Extra risk per age unit above the threshold, divided by 1 + individual wealth. '
-                   'Healthcare reduces this risk as well.')]}
+                   'Annual adult hazard at the reference age. Risk rises exponentially with age; '
+                   'also scales infant and young-adult excess risks. Healthcare reduces the full hazard.'),
+                  ('mortality_doubling_years', 'Mortality doubling time (years)', 1.0, 20.0, 0.5,
+                   'Years for adult mortality hazard to double. Default 7 approximates modern human aging; '
+                   'there is no maximum age.')]}
 
 
 def current_simulation():
@@ -213,7 +216,6 @@ COMPACT_LABELS = {
     "Value of health relative to preserving wealth": "Health priority",
     "Maximum birth probability": "Peak birth chance",
     "Base death probability": "Base mortality",
-    "Maximum age": "Maximum age",
     "Age when extra mortality begins": "Aging risk starts at",
     "Additional annual-age risk": "Extra risk per year",
 }

@@ -33,7 +33,7 @@ Command-line overrides take priority over `.env.local`, for example `make run PO
 
 ## Run a scenario
 
-The simulator starts with 300 people, one wealth unit each, and capacity for 1,000 wealth units. Defaults favor moderate growth, a functioning public budget and slower demographic change. They are exploratory model settings, not estimates for a real economy. Existing sessions keep their parameters; the sidebar's **Load default scenario** button starts a fresh run with the revised defaults.
+The simulator starts with 100 people, one wealth unit each, and capacity for 200 wealth units. Defaults favor moderate growth, a functioning public budget and slower demographic change. They are exploratory model settings, not estimates for a real economy. Existing sessions keep their parameters; the sidebar's **Load default scenario** button starts a fresh run with the revised defaults.
 
 - **Batch:** choose how many steps to advance and select **Advance simulation**. Repeating this continues the same economy.
 - **Live:** select **Start / resume** to advance continuously without a step limit. Adjust the refresh interval and steps per refresh to change playback speed. **Pause** freezes the economy for inspection; **Single step** advances it once while paused. Live updates run while the session is open.
@@ -48,7 +48,7 @@ Policy parameters are next to the charts they affect. Open an **Edit…** button
 | Economy over time | Growth, wealth growth effect, capacity depreciation and public investment. |
 | Government spending and UBI | Tax rates, progressivity, Universal Basic Income (UBI), pension eligibility and pension funding. |
 | Healthcare, aging and mortality | Public healthcare funding and effectiveness; private premiums, quality, affordability and personal choice. |
-| Population age distribution | Births, baseline mortality, aging threshold, aging risk and maximum age. |
+| Population age distribution | Births, background mortality, adult reference hazard and mortality doubling time. No maximum age. |
 
 Changing display settings also preserves the scenario. Each session has its own population and random sequence. Identical initial parameters, random seeds, and policy interventions at the same simulation steps produce identical results, including when a run is paused and resumed. The latest 1,000 policy changes are retained with their effective steps and included in the scenario settings download, together with initial and current parameters.
 
@@ -82,7 +82,7 @@ Under **Detailed data and downloads**, inspect individual wealth, age, parent ID
 
 | Parameter | Default | Purpose |
 | --- | --- | --- |
-| Population / wealth / capacity | 300 / 1 per person / 1,000 | Enough people for smoother distributions and room for growth. |
+| Population / wealth / capacity | 100 / 1 per person / 200 | A small population with room for growth. |
 | Base growth / wealth effect | 4% / alpha 0 | Moderate growth without the previous negative-alpha singularity. |
 | Wealth taxes per step | 0.5% minimum, 4% maximum, gamma 2 | A public revenue stream even when wealth is equal; these are wealth taxes, not income tax rates. |
 | UBI allocation | 25% of available government funds | Equal transfers with funds left for pensions, care and investment. |
@@ -92,16 +92,16 @@ Under **Detailed data and downloads**, inspect individual wealth, age, parent ID
 | Private investment risk | 15% chance of losing 10% of wealth | Downside risk without the former large losses. |
 | Independent losses | 15% event chance; 10% of people; up to 10% loss | Less abrupt private wealth destruction. |
 | Public investment / depreciation | 20% event chance / 0.05% capacity loss | Slower capacity erosion. |
-| Birth peak / base mortality / aging slope | 3% / 0.6% / 0.1% | Slower demographic turnover; age still increments once per step. |
+| Birth peak / background mortality / adult reference hazard | 3% / 0.02% / 0.003 at age 50 | Random annual deaths; adult hazard doubles every 7 years, with no lifespan cutoff. |
 | Private premium / mortality factor | 0.008 initial wealth / 0.5 | Paid health benefits with an affordability tradeoff. |
 
-A 200-step sensitivity check used seeds 7, 42 and 123 for three birth rates, holding the other revised defaults fixed. The selected 3% peak birth rate ended with 324–435 people, Gini 0.347–0.363, positive public balances and positive UBI payments. A 2% peak shrank the population to 71–79, and 2.5% ended at 204–238. This limited check supports an exploratory starting point; it does not guarantee stability for every seed, policy or time horizon.
+Earlier sensitivity checks used the former linear mortality model and maximum-age cutoff; they do not validate population stability under the new mortality profile. Birth rates and economic defaults remain exploratory rather than a demographic forecast.
 
 The wealth tax graph shows `minimum + (maximum - minimum) × relative_wealth ** gamma`. Relative wealth runs from the poorest person's wealth (0) to the richest (1), rather than population percentiles. Equal wealth pays the minimum. The curve uses the active policy; dots project rates on current wealth. The applied-rate chart records the actual minimum, maximum and revenue-weighted effective rate from taxation each step. Policy changes update the curve immediately and affect collections on the next step.
 
 ## Model settings
 
-All parameters from the original simulation are available in grouped controls:
+Current model parameters are available in grouped controls:
 
 | Group | Parameters |
 | --- | --- |
@@ -111,13 +111,13 @@ All parameters from the original simulation are available in grouped controls:
 | Public investment | Investment probability, capacity depreciation (`delta`), return exponent (`beta`), base efficiency, random shock magnitude, failed investment damage and success sensitivity (`psi`). |
 | Pensions and UBI | Retirement eligibility age, pension budget fraction, desired pension per retiree in multiples of initial wealth. |
 | Private healthcare | Choice strategy, premium, age surcharge, mortality risk factor, affordability limit and health-versus-wealth preference. |
-| Healthcare and aging | Share of remaining public funds spent on healthcare, effectiveness, adjustment speed, minimum mortality risk fraction, aging threshold and additional risk per age unit. |
-| Demographics | Maximum birth probability, unfunded base death probability and hard maximum age. |
+| Healthcare and aging | Share of remaining public funds spent on healthcare, effectiveness, adjustment speed and minimum mortality hazard fraction. |
+| Demographics | Maximum birth probability, background death probability, adult reference age and hazard, mortality doubling time. |
 | Display | Percentile groups (originally `tick_count`), age bins and units, history window, individual wealth visibility and logarithmic scale. |
 
 ## Step mechanics and assumptions
 
-Each step ages the population, applies wealth growth and private opportunities or random losses, collects wealth taxes, redistributes UBI, pays pensions, funds public healthcare, lets people choose public or private care, potentially invests remaining public funds in capacity, and processes deaths and births.
+Each step applies wealth growth and private opportunities or random losses, collects wealth taxes, redistributes UBI, pays pensions, funds public healthcare, lets people choose public or private care, potentially invests remaining public funds in capacity, and processes deaths over the current age-year. Survivors age by one year, then births are processed. Newborns receive their first infant mortality draw on the following step.
 
 Growth is limited by `max(1 - total personal wealth / capacity, 0)`. An individual's growth multiplier is `1 / max(1 + alpha × wealth, 0.01)`, so negative alpha favors wealthier people. The denominator floor prevents a singularity. Private opportunities are sampled with wealth-based weights. Each selected person independently succeeds or fails: success adds `wealth × gain_growth × global_growth_factor`; failure removes `wealth × failed_investment_loss`. Failure can lose wealth even when capacity limits growth. A failure probability of zero restores gain-only opportunities; one makes every selected opportunity fail. These failures are separate from the existing random loss events, which favor poorer people. The dashboard reports private opportunity failures, gains and losses for the latest step, and the history CSV includes them for every retained step. Tax rates depend on relative wealth and progressivity. UBI pays every resident the same amount, regardless of wealth, age or healthcare choice. Public investment can expand capacity or damage it when it fails; capacity also depreciates.
 
@@ -139,10 +139,10 @@ Universal Basic Income (UBI) replaces the earlier inverse-wealth redistribution.
 Public healthcare remains available to everyone. Each step, people can instead buy private care using their own wealth. The default premium is 0.008 times initial wealth per person, increased by an age surcharge:
 
 ```text
-premium = initial wealth × premium rate × (1 + age surcharge × age / maximum age)
+premium = initial wealth × premium rate × (1 + age surcharge × age / 100)
 ```
 
-Private care replaces the public mortality multiplier with a configurable private risk factor (0.5 by default). Maximum age remains a hard limit under either system. Private premiums immediately reduce personal wealth, which also feeds back into the wealth-dependent aging risk and future investment outcomes.
+Private care replaces the public mortality hazard multiplier with a configurable private factor (0.5 by default). Neither system imposes a maximum age. The premium's 100-year denominator is a fixed price reference, not a lifespan limit. Premiums reduce personal wealth and affect affordability and future investments; wealth does not directly suppress biological aging.
 
 The **Adaptive** strategy compares each person's public death risk with private death risk after paying the premium. It buys private care only if the premium is affordable and:
 
@@ -166,24 +166,29 @@ target = floor + (1 - floor) / (1 + effectiveness × funding)
 multiplier += adjustment speed × (target - multiplier)
 ```
 
-The multiplier starts at one. Sustained spending lowers it gradually; reduced or zero funding moves it back toward one. The default floor of 0.2 allows up to an 80% reduction in mortality risk. A zero healthcare allocation recovers the unfunded model after any existing protection fades.
+The multiplier starts at one. Sustained spending lowers it gradually; reduced or zero funding moves it back toward one. The default floor of 0.2 allows up to an 80% reduction in mortality **hazard**, not necessarily annual probability. A zero healthcare allocation recovers the unfunded model after any existing protection fades.
 
-Before maximum age, each person's public-care death probability is:
+Every person receives an independent Bernoulli death draw each year. The annual hazard is converted to a probability, rather than clipped at a maximum age:
 
 ```text
-age risk = aging risk rate × max(age - aging threshold, 0) / (1 + wealth)
-death probability = clamp((base death probability + age risk) × multiplier, 0, 1)
+adult = aging_risk_rate × exp(log(2) × (age - aging_risk_start) / mortality_doubling_years)
+infant = aging_risk_rate × 1.8 × exp(-2 × age)
+young_adult = aging_risk_rate × 0.3 × exp(-0.5 × ((age - 25) / 10)^2)
+hazard = -log(1 - death_base_prob) + adult + infant + young_adult
+death probability = 1 - exp(-hazard × healthcare multiplier)
 ```
 
-Aging risk begins above age 50 by default and rises with age. Healthcare reduces both baseline and age-related risks, so funding can improve survival into older ages. Maximum age remains a hard limit with certain death. Observed mortality includes these age effects and random variation, so it can differ from the healthcare-adjusted baseline shown on the dashboard.
+`aging_risk_start` is now a **reference age**, not a threshold: the adult component exists on either side of age 50. At default settings, unfunded annual risks are approximately 0.56% in infancy, 0.12% at 20, 0.32% at 50, 0.82% at 60, 5.7% at 80 and 34.6% at 100. Death becomes increasingly likely but is never forced by age; a numerical guard keeps finite-age probabilities below one. Setting background mortality to one explicitly forces death for stress testing. Setting both background mortality and the reference hazard to zero disables mortality.
 
-The mortality formulas are illustrative assumptions for this toy model. They are not calibrated demographic or healthcare estimates.
+The Gompertz-style adult curve, infant excess and young-adult hump approximate the shape and scale in the [SSA 2022 period life table](https://www.ssa.gov/oact/STATS/table4c6_2022_TR2025.html). It is a modern US reference, not a universal human table or an exact fit; the model has no sex-specific mortality. For comparison, that table reports age-60 risks of 0.77–1.25% and age-100 risks of 34.3–39.2% across females and males. Very-old-age extrapolation is uncertain.
+
+[Our World in Data describes the J-shaped age profile and its historical changes](https://ourworldindata.org/how-do-the-risks-of-death-change-as-people-age). Mortality has fallen at all ages, not just in childhood: [French data](https://ourworldindata.org/data-insights/death-rates-have-declined-across-all-ages) show roughly 50-fold lower infant mortality and five-fold lower mortality at 65 between 1816 and 2021. Improvements differ by age, country and era and can reverse during crises. Consequently, the simulator does **not** assume an automatic, indefinite annual improvement. Survival changes over simulation time through healthcare funding, its lagged protection and individual public/private choices. The uniform healthcare multiplier and its spending response are illustrative policy assumptions, not causal estimates inferred from these historical trends. The existing baseline chart tracks the background component only; the age-risk chart shows the full model.
 
 ### Births and inheritance
 
 Birth probability depends on age, is nonzero at ages 14–68, and peaks at age 30. A parent transfers half their wealth when a child is born. On death, wealth passes to children in the population, or to the government when there are none. Stable person IDs preserve family links as the population changes.
 
-This is an exploratory toy model, not a forecast or a complete representation of capitalism. It does not currently model firms, wages, prices, trade, debt, or markets. A step is an abstract unit of simulated time; results depend on the model's assumptions and random events.
+This is an exploratory toy model, not a forecast or a complete representation of capitalism. It does not currently model firms, wages, prices, trade, debt, or markets. For age and mortality, a step is one year; economic rates remain illustrative per-step settings.
 
 ## Project files
 

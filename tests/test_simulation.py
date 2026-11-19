@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from dataclasses import replace
 
 from simulation import Individual, Simulation, SimulationConfig, restore_simulation, wealth_tax_rates, tax_rates_at_relative_wealth
@@ -18,24 +19,24 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(whole.population[0].age, resumed.population[0].age)
 
     def test_age_and_step_advance_once(self):
-        sim = Simulation(SimulationConfig(pop_size=1, birth_prob_max=0, death_base_prob=0, max_age=500))
+        sim = Simulation(SimulationConfig(pop_size=1, birth_prob_max=0, death_base_prob=0, aging_risk_rate=0))
         age = sim.population[0].age
         sim.step()
         self.assertEqual(sim.population[0].age, age + 1)
         self.assertEqual(sim.step_count, 1)
 
     def test_history_window_does_not_stop_simulation(self):
-        sim = Simulation(SimulationConfig(pop_size=1, birth_prob_max=0, death_base_prob=0, max_age=500), history_limit=3)
+        sim = Simulation(SimulationConfig(pop_size=1, birth_prob_max=0, death_base_prob=0, aging_risk_rate=0), history_limit=3)
         sim.advance(10)
         self.assertEqual(sim.step_count, 10)
         self.assertEqual([row['Step'] for row in sim.history], [8, 9, 10])
 
     def test_private_opportunity_success_and_failure(self):
-        config = SimulationConfig(pop_size=1, init_wealth=10, base_growth=0,
+        config = SimulationConfig(pop_size=1, init_wealth=10, logistic_capacity=1000, base_growth=0,
                                   gain_prob=1, gain_fraction=1, gain_growth=0.2,
                                   loss_prob=0, tau_base=0, tau_max=0,
                                   birth_prob_max=0, death_base_prob=0,
-                                  investment_probability=0, max_age=500)
+                                  investment_probability=0, aging_risk_rate=0)
         success = Simulation(replace(config, investment_risk=0))
         success.step()
         self.assertAlmostEqual(success.population[0].wealth, 11.98)
@@ -53,7 +54,7 @@ class SimulationTests(unittest.TestCase):
                                   base_growth=0, gain_prob=1, gain_fraction=1,
                                   investment_risk=1, failed_investment_loss=1,
                                   loss_prob=0, tau_base=0, tau_max=0,
-                                  birth_prob_max=0, death_base_prob=0, max_age=500)
+                                  birth_prob_max=0, death_base_prob=0, aging_risk_rate=0)
         sim = Simulation(config)
         sim.advance(2)
         self.assertEqual(sim.population[0].wealth, 0)
@@ -83,13 +84,16 @@ class SimulationTests(unittest.TestCase):
         self.assertLess(sim.mortality_rate, original)
         self.assertEqual(sim.healthcare_spending, 0)
 
-    def test_healthcare_reduces_aging_risk_but_preserves_maximum_age(self):
+    def test_healthcare_reduces_aging_risk_without_a_maximum_age(self):
         sim = Simulation(SimulationConfig(pop_size=10, healthcare_spending_fraction=1))
         sim.government_budget = 100
         sim.update_healthcare()
         self.assertGreater(sim.death_probability(80, 1), sim.death_probability(20, 1))
         self.assertLess(sim.death_probability(80, 1), sim.death_probability(80, 1, funded=False))
-        self.assertEqual(sim.death_probability(sim.config.max_age, 1), 1)
+        for age in (100, 110, 120, 150, 10000):
+            self.assertGreater(sim.death_probability(age, 1), 0)
+            self.assertLess(sim.death_probability(age, 1), 1)
+            self.assertLessEqual(sim.death_probability(age, 1), sim.death_probability(age, 1, funded=False))
         # Spending also improves age-related risk when baseline mortality is zero.
         zero_base = Simulation(replace(sim.config, death_base_prob=0))
         zero_base.government_budget = 100
@@ -158,7 +162,7 @@ class SimulationTests(unittest.TestCase):
         sim = Simulation(SimulationConfig(pop_size=2, healthcare_choice_priority=10))
         poor, rich = sim.population
         poor.wealth, rich.wealth = 0.001, 10
-        poor.age = rich.age = 20
+        poor.age = rich.age = 80
         sim.choose_healthcare()
         self.assertEqual(poor.healthcare_choice, "Public")
         self.assertEqual(rich.healthcare_choice, "Private")
@@ -258,11 +262,49 @@ class SimulationTests(unittest.TestCase):
 
     def test_inheritance_uses_stable_parent_ids(self):
         sim = Simulation(SimulationConfig(pop_size=1, base_growth=0, gain_prob=0, loss_prob=0,
-                                         tau_base=0, tau_max=0, birth_prob_max=0, death_base_prob=0))
+                                         tau_base=0, tau_max=0, birth_prob_max=0, death_base_prob=0,
+                                         healthcare_choice_mode="Public only"))
         sim.population = [Individual(10, 99, person_id=40), Individual(5, 10, parent_id=40, person_id=90)]
-        sim.step()
+        with patch.object(sim, 'individual_death_probability', side_effect=lambda p: float(p.person_id == 40)):
+            sim.step()
         self.assertEqual(len(sim.population), 1)
         self.assertEqual(sim.population[0].wealth, 15)
+
+    def test_human_mortality_profile_and_wealth_independence(self):
+        sim = Simulation()
+        risk = lambda age: sim.death_probability(age, 1, funded=False)
+        self.assertGreater(risk(0), risk(1))
+        self.assertGreater(risk(1), risk(10))
+        self.assertLess(risk(20), 0.002)
+        for age, lower, upper in ((0, 0.004, 0.007), (50, 0.002, 0.006),
+                                   (60, 0.006, 0.015), (80, 0.04, 0.09), (100, 0.25, 0.5)):
+            self.assertGreater(risk(age), lower)
+            self.assertLess(risk(age), upper)
+        self.assertTrue(all(risk(age + 1) > risk(age) for age in range(30, 120)))
+        self.assertEqual(sim.death_probability(100, 0), sim.death_probability(100, 1e12))
+
+    def test_infants_receive_a_mortality_draw_before_aging(self):
+        sim = Simulation(SimulationConfig(pop_size=1, birth_prob_max=0))
+        sim.population[0].age = 0
+        ages = []
+        def survive(person):
+            ages.append(person.age)
+            return 0
+        with patch.object(sim, 'individual_death_probability', side_effect=survive):
+            sim.step()
+        self.assertEqual(ages, [0])
+        self.assertEqual(sim.population[0].age, 1)
+
+    def test_old_age_can_survive_and_doubling_time_is_validated(self):
+        sim = Simulation(SimulationConfig(pop_size=1, birth_prob_max=0,
+                                          death_base_prob=0, aging_risk_rate=0))
+        sim.population[0].age = 150
+        sim.step()
+        self.assertEqual(sim.population[0].age, 151)
+        with self.assertRaises(ValueError):
+            sim.update_policy(mortality_doubling_years=0)
+        with self.assertRaises(ValueError):
+            sim.update_policy(max_age=100)
 
 
 if __name__ == '__main__':

@@ -329,9 +329,9 @@ def dashboard():
         c.metric("Private healthcare sector assets", f"{sim.private_healthcare_balance:,.2f}", border=True)
         line_chart(trends, ["Public healthcare users", "Private healthcare users"], "Healthcare choices over time")
         st.caption("Choices count patients before deaths and births in each step. Private premiums reduce personal wealth and become private provider assets. Provider assets are tracked separately from individual wealth.")
-        st.caption("Public-care mortality adjusts gradually to government healthcare funding. Baseline mortality excludes aging; observed mortality includes public/private choices, aging, maximum-age deaths and random variation.")
+        st.caption("Each step represents one year of aging. Death is a random event at every age, not a maximum-age cutoff. Public funding gradually reduces the mortality hazard; protection fades when funding falls. Baseline mortality excludes age effects; observed mortality includes them and random variation.")
         representative_wealth = float(population.Wealth.median()) if len(population) else sim.config.init_wealth
-        risk_ages = range(sim.config.max_age + 1)
+        risk_ages = range(max(120, int(population.Age.max()) if len(population) else 0) + 1)
         risk_data = pd.DataFrame([
             {"Age": age, "Policy": policy, "Death probability": sim.death_probability(age, representative_wealth, funded)}
             for policy, funded in [("Public care", True), ("No healthcare", False)]
@@ -348,9 +348,10 @@ def dashboard():
         ).properties(height=240).interactive()
         st.subheader("Death risk by age")
         st.altair_chart(risk_chart, width="stretch", alt="Death probability by age for public care, private care and no healthcare")
-        st.caption(f"Public and unfunded curves use the current median personal wealth ({representative_wealth:,.2f}) and the private curve deducts its age-based premium. The private curve shows potential risk even if the premium is unaffordable. Maximum age ({sim.config.max_age}) remains a hard limit.")
+        st.caption("The human-shaped profile includes infant risk, low childhood risk and exponentially rising adult risk. Wealth affects private-care affordability, not aging directly. Private care shows potential risk even when unaffordable. The chart's age range is not a lifespan limit.")
+        st.caption("Calibration context: [SSA 2022 life table](https://www.ssa.gov/oact/STATS/table4c6_2022_TR2025.html); [mortality by age and over time](https://ourworldindata.org/how-do-the-risks-of-death-change-as-people-age). This is an approximate modern profile, not a fitted life table. Healthcare effects are illustrative, not causal estimates.")
     with age_slot:
-        edges = np.arange(0, max(sim.config.max_age, 50) + age_bin + 1, age_bin)
+        edges = np.arange(0, max(int(population.Age.max()) if len(population) else 0, 100) + age_bin + 1, age_bin)
         counts, _ = np.histogram(population.Age.to_numpy(), bins=edges)
         ages = pd.DataFrame({"Age range": [f"{lo}–{hi-1}" for lo, hi in zip(edges[:-1], edges[1:])],
                              "People": counts, "Share": counts / max(len(population), 1)})
