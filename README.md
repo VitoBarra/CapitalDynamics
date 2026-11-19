@@ -4,24 +4,47 @@ An interactive monetary economy sandbox with production, prices, banking, govern
 
 ## Getting started
 
-Requires Python 3.10+, `make`, and internet access to install dependencies:
+### Windows with Docker
+
+Install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Linux containers enabled. From PowerShell in the project folder:
+
+```powershell
+docker build -t capital-dynamics .
+docker run --rm -p 8501:8501 capital-dynamics
+```
+
+Open http://localhost:8501 in your browser. Stop the container with `Ctrl+C`. If port 8501 is already in use, replace `-p 8501:8501` with `-p 8502:8501` and open http://localhost:8502 instead. Rebuild the image after changing application code.
+
+### Local Python
+
+Requires Python 3.10+ and internet access to install dependencies. On Windows, from PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m streamlit run app.py
+```
+
+Run tests with `.\.venv\Scripts\python -m unittest discover -s tests -v`.
+
+### Docker with Make
+
+If `make` is installed, it can build and run the Docker image:
 
 ```bash
 make run
 ```
 
-Open the local URL printed in the terminal; stop with `Ctrl+C`. `make install` installs dependencies, `make test` runs model and interface checks, and `make help` lists commands.
+Open http://localhost:8501; stop with `Ctrl+C`. `make build` builds the image, `make test` runs the regression suite in a container, and `make help` lists commands. The tests are mounted read-only from the project folder.
 
-Run `make init-env` to create an optional, Git-ignored `.env.local` without overwriting existing settings. Use Makefile assignments without shell quotes:
+Optionally create a Git-ignored `.env.local` using Makefile assignments without shell quotes:
 
 ```makefile
 PORT=8502
-HOST=127.0.0.1
-HEADLESS=true
-STREAMLIT_ARGS=--server.runOnSave=true
+IMAGE=capital-dynamics
 ```
 
-Available settings: `PORT` (8501), `HOST` (localhost), `HEADLESS` (false), `APP` (app.py), `PYTHON` (python3), `VENV` (.venv), and `STREAMLIT_ARGS` (empty). Command-line overrides take priority, e.g. `make run PORT=8503`. Streamlit environment variables can also be added.
+Available settings: `PORT` (host port, default 8501) and `IMAGE` (default `capital-dynamics`). Command-line overrides take priority, e.g. `make run PORT=8503`.
 
 ## Run a scenario
 
@@ -79,10 +102,11 @@ Healthcare effects and economic rates are illustrative. Mortality is stochastic 
 ## Project files
 
 - `app.py`: Single monetary-dashboard entrypoint.
-- `monetary.py` / `monetary_ui.py`: Monetary accounting, policies, playback, charts and downloads.
-- `budget.py` / `budget_ui.py`: Allocation validation and visualizations.
-- `ui_components.py` / `dashboard_charts.py`: Native controls and reusable charts.
-- `simulation.py`: Historical wealth model and shared tax/demographic helpers still imported by the monetary model. Retained for compatibility and regression tests, not exposed in the app.
-- `policy_controls.py`: Historical legacy policy helpers, retained for compatibility.
-- `PopolationEconomicSimulation.py`: Original Matplotlib reference (separate dependency).
+- `capital_dynamics/monetary.py` / `monetary_ui.py`: Monetary accounting, policies, playback, charts and downloads.
+- `capital_dynamics/budget.py` / `budget_ui.py`: Allocation validation and visualizations.
+- `capital_dynamics/ui_components.py` / `dashboard_charts.py`: Native controls and reusable charts.
+- `capital_dynamics/simulation.py`: Historical wealth model and shared tax/demographic helpers used by the monetary model.
+- `capital_dynamics/policy_controls.py`: Historical legacy policy helpers.
+- `examples/PopolationEconomicSimulation.py`: Original Matplotlib reference (requires a separate Matplotlib installation and a graphical environment).
+- `Dockerfile`: Linux container for running the dashboard with Docker Desktop.
 - `tests/`: Model, accounting and interface regression checks.

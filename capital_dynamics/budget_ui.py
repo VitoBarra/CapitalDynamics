@@ -2,7 +2,7 @@
 import altair as alt
 import pandas as pd
 import streamlit as st
-from budget import COLORS, allocation_rows
+from capital_dynamics.budget import COLORS, allocation_rows
 
 
 def allocation_view(total, shares, spent, *, title="Policy allocation", key="budget"):

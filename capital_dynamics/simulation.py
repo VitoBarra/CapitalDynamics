@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace, fields
 import random
 import math
 import numpy as np
-from budget import LEGACY_FIELDS, allocate, validate_allocations
+from capital_dynamics.budget import LEGACY_FIELDS, allocate, validate_allocations
 
 @dataclass
 class Individual:

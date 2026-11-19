@@ -2,7 +2,7 @@
 import altair as alt
 import streamlit as st
 
-from monetary_ui import monetary_workspace
+from capital_dynamics.monetary_ui import monetary_workspace
 
 
 # Every resident remains available beyond Altair's default row limit.

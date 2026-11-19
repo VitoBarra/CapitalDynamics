@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from budget import COLORS, POLICIES
-from simulation import relative_wealth, tax_rates_at_relative_wealth, wealth_tax_rates
+from capital_dynamics.budget import COLORS, POLICIES
+from capital_dynamics.simulation import relative_wealth, tax_rates_at_relative_wealth, wealth_tax_rates
 
 PALETTE = ["#2563EB", "#0D9488", "#D97706", "#7C3AED", "#E11D48", "#64748B"]
 SERIES_COLORS = {**dict(zip(POLICIES, COLORS)), "Debt service": COLORS[4],

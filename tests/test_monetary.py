@@ -2,7 +2,7 @@ from dataclasses import replace
 import math
 import unittest
 
-from monetary import (BANK, GOV, PRODUCER, COMPARISON_NAMES, MonetaryConfig, MonetarySimulation,
+from capital_dynamics.monetary import (BANK, GOV, PRODUCER, COMPARISON_NAMES, MonetaryConfig, MonetarySimulation,
                       comparison_config, restore_monetary_simulation)
 from types import SimpleNamespace
 

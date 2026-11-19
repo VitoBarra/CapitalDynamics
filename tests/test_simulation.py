@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 from dataclasses import replace
 
-from simulation import Individual, Simulation, SimulationConfig, restore_simulation, wealth_tax_rates, tax_rates_at_relative_wealth
+from capital_dynamics.simulation import Individual, Simulation, SimulationConfig, restore_simulation, wealth_tax_rates, tax_rates_at_relative_wealth
 
 
 class SimulationTests(unittest.TestCase):

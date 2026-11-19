@@ -7,11 +7,11 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from budget import LEGACY_FIELDS, POLICIES
-from budget_ui import allocation_view
-from monetary import COMPARISON_NAMES, MonetarySimulation, comparison_config, restore_monetary_simulation
-from ui_components import display_controls, playback_controls, policy_fields, sync_widget_value, widget_default
-from dashboard_charts import trend_chart, wealth_distribution, tax_curve, age_distribution, series_scale
+from capital_dynamics.budget import LEGACY_FIELDS, POLICIES
+from capital_dynamics.budget_ui import allocation_view
+from capital_dynamics.monetary import COMPARISON_NAMES, MonetarySimulation, comparison_config, restore_monetary_simulation
+from capital_dynamics.ui_components import display_controls, playback_controls, policy_fields, sync_widget_value, widget_default
+from capital_dynamics.dashboard_charts import trend_chart, wealth_distribution, tax_curve, age_distribution, series_scale
 
 # Names are deliberately separate from the legacy widgets and model state.
 SPECS: dict[str, list[tuple[Any, ...]]] = {

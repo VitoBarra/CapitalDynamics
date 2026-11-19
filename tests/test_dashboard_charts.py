@@ -2,8 +2,8 @@ import unittest
 
 import pandas as pd
 
-from budget import COLORS
-from dashboard_charts import distribution_data, series_scale
+from capital_dynamics.budget import COLORS
+from capital_dynamics.dashboard_charts import distribution_data, series_scale
 
 
 class DashboardChartTests(unittest.TestCase):

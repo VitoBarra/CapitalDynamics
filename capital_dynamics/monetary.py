@@ -13,8 +13,8 @@ from typing import Any
 
 import numpy as np
 
-from budget import LEGACY_FIELDS, allocate, validate_allocations
-from simulation import Simulation, SimulationConfig, age_dependent_birth_prob, gini_coefficient, wealth_tax_rates
+from capital_dynamics.budget import LEGACY_FIELDS, allocate, validate_allocations
+from capital_dynamics.simulation import Simulation, SimulationConfig, age_dependent_birth_prob, gini_coefficient, wealth_tax_rates
 
 EPS = 1e-9
 GOV, PRODUCER, HEALTH, BANK = "Government", "Production", "Healthcare", "Bank"

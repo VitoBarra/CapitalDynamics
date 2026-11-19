@@ -1,8 +1,8 @@
 """Spacious section-local policy forms, stable during live chart refreshes."""
 from typing import Any
 import streamlit as st
-from budget import LEGACY_FIELDS, POLICIES
-from ui_components import policy_fields, sync_widget_value, widget_default
+from capital_dynamics.budget import LEGACY_FIELDS, POLICIES
+from capital_dynamics.ui_components import policy_fields, sync_widget_value, widget_default
 
 POLICY_FIELDS: dict[str, list[tuple[Any, ...]]] = {'private_investments': [('gain_prob', 'Private opportunity event probability', 0.0, 1.0, 0.05),
                          ('gain_fraction',
@@ -150,7 +150,7 @@ POLICY_FIELDS: dict[str, list[tuple[Any, ...]]] = {'private_investments': [('gai
 def current_simulation():
     """Fragments and callbacks can run without the app's page-load migration."""
     import importlib
-    import simulation as model
+    from capital_dynamics import simulation as model
     if not hasattr(model.SimulationConfig, "budget_mode"):
         model = importlib.reload(model)
     restored = model.restore_simulation(st.session_state.simulation)

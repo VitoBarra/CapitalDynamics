@@ -1,8 +1,8 @@
 import itertools
 import unittest
 
-from budget import allocate, allocation_rows, validate_allocations
-from simulation import Simulation, SimulationConfig, restore_simulation
+from capital_dynamics.budget import allocate, allocation_rows, validate_allocations
+from capital_dynamics.simulation import Simulation, SimulationConfig, restore_simulation
 
 
 class BudgetTests(unittest.TestCase):
