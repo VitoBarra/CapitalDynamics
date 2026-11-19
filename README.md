@@ -40,7 +40,9 @@ The simulator starts with 100 people, one wealth unit each, and capacity for 200
 - **Reset current scenario:** return to step zero with the current scenario's parameters and random seed.
 - **Create new scenario:** use the sidebar for initial population, initial wealth, initial capacity and random seed. This creates an economy at step zero using the currently active policies.
 
-Policy parameters are next to the charts they affect. Open an **Edit…** button, adjust values, and select **Apply policy**. Changes take effect on the next step without resetting population, wealth, history, healthcare protection or the random sequence. Live mode keeps running. While paused, changes wait until you advance again. Controls stay outside the timed chart refresh so automatic updates do not interrupt parameter edits. Invalid tax ranges are rejected as one transaction.
+Policy parameters are next to the charts they affect. Expand the relevant **settings** panel, adjust values, and select **Apply policy**. Changes take effect on the next step without resetting population, wealth, history, healthcare protection or the random sequence. Live mode keeps running. While paused, changes wait until you advance again. Controls stay outside the timed chart refresh so automatic updates do not interrupt parameter edits. Invalid tax ranges are rejected as one transaction.
+
+The sidebar separates **Scenario** setup from **Display** options. Policy panels use aligned input rows and stack on narrow screens. The app includes coordinated light and dark themes with visible button and input borders; choose an appearance from Streamlit's settings menu.
 
 | Section | Live controls |
 | --- | --- |

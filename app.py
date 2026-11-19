@@ -22,7 +22,8 @@ alt.data_transformers.disable_max_rows()
 
 st.set_page_config(page_title="Capital Dynamics", page_icon=":material/monitoring:", layout="wide")
 st.title("Capital Dynamics")
-st.caption("A capitalist economy sandbox · private wealth, inequality, taxation, investment and demographics")
+st.caption("Economy sandbox")
+st.write("Explore how investment, public policy and demographics shape wealth over time.")
 
 DEFAULT_CONFIG = SimulationConfig()
 if "simulation" not in st.session_state:
@@ -38,8 +39,8 @@ if st.session_state.pop("reload_initial_controls", False):
     st.session_state.seed = 42
 
 with st.sidebar:
-    st.header("New scenario")
-    st.caption("Set initial conditions here. Edit policies beside each section to change the current economy live.")
+    st.header("Workspace", anchor=False)
+    scenario_tab, display_tab = st.tabs(["Scenario", "Display"])
     config = {**asdict(SimulationConfig()), **asdict(st.session_state.simulation.config)}
     fields: dict[str, Any] = {}
 
@@ -51,7 +52,9 @@ with st.sidebar:
         fields[name] = st.number_input(label, min_value=minimum, max_value=maximum,
                                       step=step, help=help_text, key=f"config_{name}")
 
-    with st.form("scenario"):
+    with scenario_tab, st.form("scenario", enter_to_submit=False):
+        st.subheader("Initial conditions", anchor=False)
+        st.caption("Create a fresh economy using the active policies.")
         st.session_state.setdefault("seed", 42)
         seed = st.number_input("Random seed", 0, 1000000, key="seed")
         number("pop_size", "Starting population", 1, 10000, 10)
@@ -64,7 +67,7 @@ with st.sidebar:
         st.session_state.running = False
         sync_policy_controls()
 
-    if st.button("Load default scenario", key="load_defaults", width="stretch"):
+    if scenario_tab.button("Load default scenario", icon=":material/restore:", key="load_defaults", width="stretch"):
         st.session_state.simulation = Simulation(DEFAULT_CONFIG, seed=42)
         st.session_state.running = False
         sync_policy_controls()
@@ -72,37 +75,49 @@ with st.sidebar:
         st.session_state.reload_initial_controls = True
         st.rerun()
 
-    st.header("Display settings")
-    groups = st.slider("Wealth percentile groups", 2, 20, 10, key="groups")
-    age_bin = st.select_slider("Age bin width", [1, 5, 10, 20], value=10, key="age_bin")
-    age_unit = st.segmented_control("Age distribution units", ["Share", "People"], default="Share", key="age_unit") or "Share"
-    history_window = st.number_input("Steps shown in trend charts", 10, 10000, 500, 50, key="history_window")
-    show_individuals = st.toggle("Show individual wealth chart", True, key="show_individuals")
-    log_wealth = st.toggle("Logarithmic individual wealth scale", False, key="log_wealth")
+    with display_tab:
+        st.subheader("Charts & display", anchor=False)
+        st.caption("Adjust the charts for the current economy.")
+        history_window = st.number_input("Steps shown in trends", 10, 10000, 500, 50, key="history_window")
+        st.divider()
+        st.markdown("**Wealth distribution**")
+        groups = st.slider("Percentile groups", 2, 20, 10, key="groups")
+        show_individuals = st.toggle("Show individual wealth", True, key="show_individuals")
+        log_wealth = st.toggle("Logarithmic wealth scale", False, key="log_wealth",
+                               help="Applies to the individual wealth chart. Zero wealth is omitted on a logarithmic scale.")
+        st.divider()
+        st.markdown("**Age distribution**")
+        age_bin = st.select_slider("Age bin width", [1, 5, 10, 20], value=10, key="age_bin")
+        age_unit = st.segmented_control("Distribution units", ["Share", "People"], default="Share", key="age_unit") or "Share"
+    st.divider()
+    st.caption("Open a policy panel in the dashboard to change the current economy. Apply changes to use them from the next step.")
 
-mode = st.segmented_control("Simulation mode", ["Batch", "Live"], default="Batch", key="mode") or "Batch"
-if mode != "Live":
-    st.session_state.running = False
 with st.container(border=True):
+    st.subheader("Simulation controls", anchor=False)
+    mode = st.segmented_control("Simulation mode", ["Batch", "Live"], default="Batch", key="mode") or "Batch"
+    if mode != "Live":
+        st.session_state.running = False
     if mode == "Batch":
         a, b = st.columns([2, 1], vertical_alignment="bottom")
         steps = a.number_input("Steps to advance", 1, 10000, 100, 10, key="batch_steps")
-        if b.button("Advance simulation", type="primary", width="stretch", key="advance"):
+        if b.button("Advance simulation", icon=":material/fast_forward:", type="primary", width="stretch", key="advance"):
             with st.spinner("Advancing simulation…"):
                 st.session_state.simulation.advance(int(steps))
     else:
-        a, b = st.columns(2)
+        a, b = st.columns(2, vertical_alignment="bottom")
         interval = a.select_slider("Refresh every (seconds)", [0.1, 0.25, 0.5, 1.0, 2.0], value=0.5, key="interval")
         steps_per_refresh = b.number_input("Steps per refresh", 1, 100, 1, key="steps_per_refresh")
-        a, b, c = st.columns(3)
-        if a.button("Start / resume", type="primary", width="stretch", key="start"):
-            st.session_state.running = True
-        if b.button("Pause", width="stretch", key="pause"):
-            st.session_state.running = False
-        if c.button("Single step", disabled=st.session_state.running, width="stretch", key="single_step"):
+        def toggle_live():
+            st.session_state.running = not st.session_state.running
+
+        a, b = st.columns(2)
+        live_label = "Pause" if st.session_state.running else "Resume" if st.session_state.simulation.step_count else "Start"
+        a.button(live_label, icon=":material/pause:" if st.session_state.running else ":material/play_arrow:",
+                 type="primary", width="stretch", key="toggle_live", on_click=toggle_live)
+        if b.button("Single step", icon=":material/skip_next:", disabled=st.session_state.running, width="stretch", key="single_step"):
             st.session_state.simulation.advance()
         st.caption("Live mode continues without a step limit while this session is open. Pause to inspect the charts; resume continues the same economy.")
-    if st.button("Reset current scenario", key="reset"):
+    if st.button("Reset current scenario", icon=":material/restart_alt:", key="reset", help="Restart this economy with its current policies and original seed."):
         previous = st.session_state.simulation
         st.session_state.simulation = Simulation(previous.config, seed=previous.seed)
         st.session_state.running = False
@@ -135,34 +150,43 @@ def line_chart(history, names, title, domain=None, reference_value=None, percent
 
 # Policy forms stay outside the timer so chart updates never redraw draft inputs.
 summary_slot = st.container()
-st.header("Current wealth distribution")
-policy_controls("private_investments", "Edit private investment risk")
-wealth_slot = st.container()
+with st.container(border=True):
+    st.header("Current wealth distribution")
+    st.caption("Who holds the wealth, and how evenly is it shared?")
+    policy_controls("private_investments", "Private investment settings")
+    wealth_slot = st.container()
 
-st.header("Economy over time")
-policy_controls("investment", "Edit growth and public investment")
-economy_slot = st.container()
+with st.container(border=True):
+    st.header("Economy over time")
+    st.caption("Track growth, productive capacity and population.")
+    policy_controls("investment", "Growth and public investment settings")
+    economy_slot = st.container()
 
-st.header("Government spending and UBI")
-left, right = st.columns(2)
-with left:
-    policy_controls("taxes", "Edit taxes and UBI")
-with right:
-    policy_controls("pensions", "Edit pensions")
-st.caption("Budget order: Universal Basic Income (UBI) → pensions → public healthcare → capacity investment.")
-government_slot = st.container()
+with st.container(border=True):
+    st.header("Government budget and taxes")
+    st.caption("Track tax revenue, the government balance and expenditure by purpose.")
+    policy_controls("taxes", "Tax settings")
+    government_slot = st.container()
 
-st.header("Healthcare, aging and mortality")
-left, right = st.columns(2)
-with left:
-    policy_controls("healthcare", "Edit public healthcare policy")
-with right:
-    policy_controls("private_healthcare", "Edit private care and personal choice")
-healthcare_slot = st.container()
+with st.container(border=True):
+    st.header("UBI and pensions")
+    st.caption("Budget priority: UBI → pensions → public healthcare → capacity investment.")
+    policy_controls("ubi", "UBI settings")
+    policy_controls("pensions", "Pension settings")
+    transfers_slot = st.container()
 
-st.header("Population age distribution")
-policy_controls("demographics", "Edit demographics and aging")
-age_slot = st.container()
+with st.container(border=True):
+    st.header("Healthcare, aging and mortality")
+    st.caption("Compare public funding, private care and their effects on health.")
+    policy_controls("healthcare", "Public healthcare settings")
+    policy_controls("private_healthcare", "Private care and personal choice settings")
+    healthcare_slot = st.container()
+
+with st.container(border=True):
+    st.header("Population age distribution")
+    st.caption("Inspect the age profile and adjust births, aging and mortality.")
+    policy_controls("demographics", "Demographics and aging settings")
+    age_slot = st.container()
 download_slot = st.container()
 
 
@@ -178,12 +202,13 @@ def dashboard():
     trends = history.tail(int(history_window))
     last = history.iloc[-1]
     status = "Running" if st.session_state.running else "Paused" if mode == "Live" else "Batch"
-    with summary_slot:
+    # Own each slot's child container so nested chart layouts remain inside
+    # the fragment on timer reruns as well as full app runs.
+    with summary_slot.container():
         st.caption(f"{status} · Step {sim.step_count:,} · Seed {sim.seed} · {len(sim.history):,} retained history rows")
         if not sim.population:
             st.warning("The population became extinct. Reset the scenario or adjust its demographic settings.")
-    with wealth_slot:
-        st.metric("Personal wealth", f'{last["Total wealth"]:,.2f}', border=True)
+    with wealth_slot.container():
         st.caption(
             f"Last step's private opportunities: {int(last.get('Failed private investments', 0)):,} failures · "
             f"{last.get('Private investment losses', 0):,.2f} wealth lost · "
@@ -247,20 +272,20 @@ def dashboard():
         st.metric("Gini coefficient", f'{last["Gini coefficient"]:.3f}', border=True)
         line_chart(trends, ["Gini coefficient"], "Gini coefficient", domain=[0, 1])
 
-    with economy_slot:
+    with economy_slot.container():
         left, right = st.columns(2)
         with left:
+            st.metric("Wealth capacity", f'{last["Wealth capacity"]:,.2f}', border=True)
             line_chart(trends, ["Total wealth", "Wealth capacity"], "Private wealth and capacity",
                        reference_value=float(last["Wealth capacity"]))
         with right:
             st.metric("Population", f'{int(last["Population"]):,}', border=True)
             line_chart(trends, ["Population"], "Population")
-    with government_slot:
+    with government_slot.container():
         a, b, c = st.columns(3)
         a.metric("Government budget", f'{last["Government budget"]:,.2f}', border=True)
-        b.metric("UBI spending this step", f'{last["UBI transfers"]:,.2f}', border=True)
-        c.metric("UBI per person", f'{last["UBI per person"]:,.4f}', border=True)
-        st.caption("Universal Basic Income (UBI) is the same payment for every resident, deducted from government funds before pensions, public healthcare and capacity investment.")
+        b.metric("Tax revenue this step", f'{last["Tax revenue"]:,.2f}', border=True)
+        c.metric("Government spending this step", f'{last["Total government spending"]:,.2f}', border=True)
         line_chart(trends, ["Government budget"], "Government budget")
         left, right = st.columns(2)
         with left:
@@ -284,10 +309,6 @@ def dashboard():
             line_chart(trends, ["Minimum applied tax rate", "Effective wealth tax rate", "Maximum applied tax rate"], "Applied wealth tax rates", percentage=True)
         spending_columns = ["UBI transfers", "Pension spending", "Healthcare spending", "Capacity investment"]
         spending = trends[["Step", *spending_columns]].melt("Step", var_name="Purpose", value_name="Spending")
-        a, b, c = st.columns(3)
-        a.metric("Government spending this step", f"{last['Total government spending']:,.2f}", border=True)
-        b.metric("Pension spending", f"{last['Pension spending']:,.2f}", border=True)
-        c.metric("Unfunded pension entitlement", f"{last['Pension shortfall']:,.2f}", border=True)
         left, right = st.columns(2)
         with left:
             st.subheader("Government spending over time")
@@ -307,12 +328,21 @@ def dashboard():
         ledger_rows = ["Opening government budget", "Tax revenue", "Estate revenue", *spending_columns,
                        "Total government spending", "Government budget", "Government balance error"]
         ledger = pd.DataFrame({"Account": ledger_rows, "Amount": [last[name] for name in ledger_rows]})
-        with st.expander("Government accounts and pension details"):
+        with st.expander("Government accounts"):
             st.dataframe(ledger, hide_index=True, alt="Government opening funds, revenue, expenditure and closing budget reconciliation")
-            st.caption(f"Eligible for pensions before deaths: {int(last['Pension eligible']):,}. Payments are budget-limited and shared equally among retirees. UBI also reaches retirees.")
         st.caption("Opening budget + taxes + estates − UBI − pensions − public healthcare − capacity investment = closing budget. Private premiums are paid by individuals and are outside government expenditure.")
 
-    with healthcare_slot:
+    with transfers_slot.container():
+        a, b = st.columns(2)
+        a.metric("UBI spending this step", f'{last["UBI transfers"]:,.2f}', border=True)
+        b.metric("UBI per person", f'{last["UBI per person"]:,.4f}', border=True)
+        st.caption("Universal Basic Income (UBI) is the same payment for every resident, deducted from government funds before pensions, public healthcare and capacity investment.")
+        a, b = st.columns(2)
+        a.metric("Pension spending", f"{last['Pension spending']:,.2f}", border=True)
+        b.metric("Unfunded pension entitlement", f"{last['Pension shortfall']:,.2f}", border=True)
+        st.caption(f"Eligible for pensions before deaths: {int(last['Pension eligible']):,}. Payments are budget-limited and shared equally among retirees. UBI also reaches retirees.")
+
+    with healthcare_slot.container():
         a, b, c = st.columns(3)
         a.metric("Public-care baseline mortality", f"{sim.mortality_rate:.2%}", border=True)
         b.metric("Healthcare spending this step", f"{sim.healthcare_spending:,.2f}", border=True)
@@ -350,7 +380,7 @@ def dashboard():
         st.altair_chart(risk_chart, width="stretch", alt="Death probability by age for public care, private care and no healthcare")
         st.caption("The human-shaped profile includes infant risk, low childhood risk and exponentially rising adult risk. Wealth affects private-care affordability, not aging directly. Private care shows potential risk even when unaffordable. The chart's age range is not a lifespan limit.")
         st.caption("Calibration context: [SSA 2022 life table](https://www.ssa.gov/oact/STATS/table4c6_2022_TR2025.html); [mortality by age and over time](https://ourworldindata.org/how-do-the-risks-of-death-change-as-people-age). This is an approximate modern profile, not a fitted life table. Healthcare effects are illustrative, not causal estimates.")
-    with age_slot:
+    with age_slot.container():
         edges = np.arange(0, max(int(population.Age.max()) if len(population) else 0, 100) + age_bin + 1, age_bin)
         counts, _ = np.histogram(population.Age.to_numpy(), bins=edges)
         ages = pd.DataFrame({"Age range": [f"{lo}–{hi-1}" for lo, hi in zip(edges[:-1], edges[1:])],
@@ -363,7 +393,7 @@ def dashboard():
             tooltip=["Age range:N", "People:Q", alt.Tooltip("Share:Q", format=".2%")],
         ).properties(height=240)
         st.altair_chart(age_chart, width="stretch", alt="Population age distribution in configurable age bins")
-    with download_slot:
+    with download_slot.container():
         with st.expander("Detailed data and downloads"):
             st.subheader("Population snapshot")
             st.dataframe(population, hide_index=True, alt="Personal wealth, pension income, healthcare choice, premium and death probability for every person")

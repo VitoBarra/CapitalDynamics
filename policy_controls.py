@@ -1,4 +1,4 @@
-"""Section-local policy forms that remain stable during live chart refreshes."""
+"""Spacious section-local policy forms, stable during live chart refreshes."""
 from typing import Any
 import streamlit as st
 
@@ -48,8 +48,8 @@ POLICY_FIELDS: dict[str, list[tuple[Any, ...]]] = {'private_investments': [('gai
             0.1,
             20.0,
             0.1,
-            'Higher values concentrate higher tax rates toward the wealthiest individuals.'),
-           ('direct_redistribution_fraction',
+             'Higher values concentrate higher tax rates toward the wealthiest individuals.')],
+ 'ubi': [('direct_redistribution_fraction',
             'Government budget allocated to UBI per step',
             0.0,
             1.0,
@@ -223,16 +223,16 @@ COMPACT_LABELS = {
 
 def policy_controls(group, title):
     config = current_simulation().config
-    with st.popover(title, icon=":material/tune:", type="tertiary", key=f"policy_menu_{group}"):
-        st.caption("Takes effect next step; the current run continues.")
-        with st.form(f"policy_{group}", border=False):
+    with st.expander(title, icon=":material/tune:", key=f"policy_menu_{group}"):
+        st.caption("Adjust the settings, then apply this policy. Changes take effect next step and preserve the current economy.")
+        with st.form(f"policy_{group}", border=False, enter_to_submit=False):
             if group == "private_healthcare":
                 st.session_state.setdefault("config_healthcare_choice_mode", config.healthcare_choice_mode)
                 st.selectbox("Care choice", ["Adaptive", "Public only", "Private if affordable"],
                              key="config_healthcare_choice_mode")
             specs = POLICY_FIELDS[group]
             for index in range(0, len(specs), 2):
-                columns = st.columns(2, gap="small")
+                columns = st.columns(2, gap="medium", vertical_alignment="bottom")
                 for column, spec in zip(columns, specs[index:index + 2]):
                     name, label, minimum, maximum, step, *help_text = spec
                     key = f"config_{name}"
@@ -240,8 +240,8 @@ def policy_controls(group, title):
                     st.session_state.setdefault(key, float(value) if isinstance(minimum, float) else int(value))
                     with column:
                         st.number_input(COMPACT_LABELS.get(label, label), min_value=minimum, max_value=maximum,
-                                        step=step, help=help_text[0] if help_text else None, key=key)
-            st.form_submit_button("Apply", key=f"apply_{group}", type="primary", width="stretch",
+                                        step=step, help=f"{label}. {help_text[0]}" if help_text else label, key=key)
+            st.form_submit_button("Apply policy", icon=":material/check:", key=f"apply_{group}", type="primary", width="stretch",
                                   on_click=apply_policy, args=(group,))
         notice = st.session_state.get("policy_notices", {}).get(group)
         if notice:
