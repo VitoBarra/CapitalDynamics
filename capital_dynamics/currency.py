@@ -10,7 +10,7 @@ MONEY_COLUMNS = {
     "Pension shortfall", "Private premiums", "Base money", "Broad money", "UBI per person",
     "Loans originated", "Loan interest accrued", "Loan interest paid", "Loan principal repaid",
     "Loan defaults", "Bank bond credit", "Bank bond repayments", "Bank distributions",
-    "Bond interest paid", "Bond principal repaid", "Bond principal defaults",
+    "Bond interest paid", "Bond principal repaid",
     "Debt service due", "Debt service shortfall", "Consumption", "Opening government money",
     "Total government spending", "Money balance error", "Base money balance error",
     "Government balance error", "Assets", "Liabilities", "Net worth", "Error", "Amount",
@@ -20,6 +20,10 @@ MONEY_COLUMNS = {
     "Disposable income", "Income received", "Wealth tax paid", "Verified repayment income",
     "Loan recoveries", "Loan principal losses", "Bank bond interest received", "Bank bond principal losses",
     "Bank realized profit", "Prudential bank equity", "Unpaid loan interest",
+    "Government market debt", "Government arrears", "Opening government debt", "Bond interest accrued",
+    "Refinanced principal", "Sovereign debt written off", "Sovereign market losses", "Government debt balance error",
+    "Bank bond valuation change", "Bond face value", "Bond interest arrears", "Market value",
+    "Principal cancelled", "Interest cancelled", "Creditor market loss", "Bank principal loss",
 }
 for _policy in ("UBI", "Pensions", "Healthcare", "Public investment", "Debt service"):
     MONEY_COLUMNS.update((f"{_policy} spent", f"{_policy} allocated"))

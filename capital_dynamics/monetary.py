@@ -85,8 +85,13 @@ class MonetaryConfig:
     bond_term: int = 10
     bond_purchase_fraction: float = 0.05
     bank_bond_fraction: float = 0.25
-    debt_service_fraction: float = 0.05
-    principal_first: bool = False
+    sovereign_base_spread: float = 0.005
+    sovereign_debt_sensitivity: float = 0.02
+    sovereign_arrears_sensitivity: float = 0.1
+    sovereign_default_penalty: float = 0.08
+    sovereign_reputation_recovery: float = 0.1
+    sovereign_risk_aversion: float = 5.0
+    sovereign_exclusion_years: int = 3
     monetary_financing: bool = False
     issuance_per_step: float = 0.0
     money_cap: float = 0.0  # Zero means disabled, not a zero-money economy.
@@ -142,17 +147,21 @@ class Bond:
     rate: float
     issued: int
     maturity: int
+    arrears: float = 0.0
+    last_coupon_year: int = 0
 
 
 def validate_config(config):
     defaults = MonetaryConfig()
-    initial = {"pop_size", "loan_term", "bond_term", "default_after", "retirement_age", "aging_risk_start", "default_cooldown"}
+    initial = {"pop_size", "loan_term", "bond_term", "default_after", "retirement_age", "aging_risk_start",
+               "default_cooldown", "sovereign_exclusion_years"}
     fractions = {"consumption_fraction", "wage_fraction", "producer_dividend_fraction", "private_investment_fraction",
                  "inflation_response", "loan_demand", "capital_ratio", "reserve_ratio", "bank_dividend_fraction",
-                 "bond_purchase_fraction", "bank_bond_fraction", "debt_service_fraction", "delta", "investment_risk",
+                 "bond_purchase_fraction", "bank_bond_fraction", "delta", "investment_risk",
                  "failed_investment_loss", "death_base_prob", "birth_prob_max", "healthcare_response_rate",
                  "mortality_floor_fraction", "private_healthcare_mortality_factor", "private_healthcare_max_wealth_fraction",
-                 "tau_base", "tau_max", "debt_service_limit", "income_stress_fraction", "collateral_recovery_haircut"}
+                 "tau_base", "tau_max", "debt_service_limit", "income_stress_fraction", "collateral_recovery_haircut",
+                 "sovereign_reputation_recovery"}
     for name, value in asdict(config).items():
         expected = getattr(defaults, name)
         if isinstance(expected, bool) and not isinstance(value, bool):
@@ -197,11 +206,20 @@ class MonetarySimulation:
             raise ValueError("Money cap is below starting supply. Increase the cap or lower initial money.")
         self.next_id = self.config.pop_size
         self.price = 1.0
+        self.reference_nominal_output = min(
+            self.config.initial_capacity,
+            sum(18 <= p.age < self.config.retirement_age for p in self.population) * self.config.productivity)
         self.public_assets = 0.0
         self.producer_assets = 0.0
         self.loans: list[Loan] = []
         self.bonds: list[Bond] = []
         self.step_count = 0
+        self._in_step = False
+        self.sovereign_default_pending = False
+        self.sovereign_default_count = 0
+        self.last_sovereign_default_year = None
+        self.reputation_spread = 0.0
+        self.sovereign_events = deque(maxlen=1000)
         self.mortality_multiplier = 1.0
         self.policy_changes = deque(maxlen=1000)
         self.transactions = deque(maxlen=10000)
@@ -222,8 +240,9 @@ class MonetarySimulation:
 
     @property
     def bank_equity(self):
+        required_yield = self.config.bond_rate + self.sovereign_spread()
         return self.reserves + sum(x.principal + x.arrears for x in self.loans) + sum(
-            x.principal for x in self.bonds if x.holder == BANK) - self.broad_money
+            sum(self.bond_values(x, required_yield=required_yield)) for x in self.bonds if x.holder == BANK) - self.broad_money
 
     @property
     def unpaid_interest(self):
@@ -231,12 +250,71 @@ class MonetarySimulation:
 
     @property
     def prudential_equity(self):
-        """Uncollected household interest cannot fund credit or distributions."""
-        return self.bank_equity - self.unpaid_interest
+        """Exclude uncollected interest and unrealized gains; retain bond losses."""
+        required_yield = self.config.bond_rate + self.sovereign_spread()
+        return (self.reserves + sum(loan.principal for loan in self.loans)
+                + sum(min(b.principal, self.bond_values(b, required_yield=required_yield)[0])
+                      for b in self.bonds if b.holder == BANK)
+                - self.broad_money)
+
+    @property
+    def bank_bond_valuation_reserve(self):
+        required_yield = self.config.bond_rate + self.sovereign_spread()
+        return sum(max(0, b.principal - self.bond_values(b, required_yield=required_yield)[0])
+                   for b in self.bonds if b.holder == BANK)
+
+    @property
+    def current_year(self):
+        return self.step_count + int(self._in_step)
 
     @property
     def government_debt(self):
-        return sum(x.principal for x in self.bonds)
+        """Contractual principal plus accrued unpaid interest, not market value."""
+        return sum(x.principal + x.arrears for x in self.bonds)
+
+    @property
+    def government_arrears(self):
+        return self.bond_obligations(self.current_year)
+
+    @property
+    def government_market_debt(self):
+        required_yield = self.config.bond_rate + self.sovereign_spread()
+        return sum(sum(self.bond_values(b, required_yield=required_yield)) for b in self.bonds)
+
+    @property
+    def sovereign_market_access(self):
+        return (self.last_sovereign_default_year is None
+                or self.current_year - self.last_sovereign_default_year > self.config.sovereign_exclusion_years)
+
+    def sovereign_spread(self, additional_debt=0.0):
+        """Illustrative risk premium (capped at 50 percentage points), not a PD."""
+        # Explicit state, not history[-1]: appending a zero-output observation
+        # must not itself change bond prices after the accounts were closed.
+        nominal_output = self.reference_nominal_output
+        debt = self.government_debt + additional_debt
+        ratio = min(10, debt / max(nominal_output, EPS))
+        arrears_share = self.government_arrears / debt if debt > EPS else 0.0
+        return min(.5, self.config.sovereign_base_spread + self.config.sovereign_debt_sensitivity * ratio
+                   + self.config.sovereign_arrears_sensitivity * arrears_share + self.reputation_spread)
+
+    def bond_values(self, bond, *, required_yield=None):
+        """PV of remaining principal/coupons and separately carried coupon arrears."""
+        rate = self.config.bond_rate + self.sovereign_spread() if required_yield is None else required_yield
+        years = max(1, bond.maturity - max(self.current_year, bond.issued))
+        discount = math.exp(-years * math.log1p(rate))
+        if abs(bond.rate - rate) < 1e-12:
+            principal_value = bond.principal
+        elif rate > 0:
+            principal_value = bond.principal * (bond.rate * (1 - discount) / rate + discount)
+        else:
+            principal_value = bond.principal * (1 + bond.rate * years)
+        return principal_value, bond.arrears / (1 + rate)
+
+    def bond_market_value(self, bond):
+        return sum(self.bond_values(bond))
+
+    def bond_obligations(self, year):
+        return sum(b.arrears + (b.principal if b.maturity <= year else 0) for b in self.bonds)
 
     @property
     def capacity(self):
@@ -250,7 +328,9 @@ class MonetarySimulation:
         return sum(x.principal + x.arrears for x in self.loans if x.borrower == person.person_id)
 
     def bond_assets(self, person):
-        return sum(x.principal for x in self.bonds if x.holder == person.account)
+        required_yield = self.config.bond_rate + self.sovereign_spread()
+        return sum(sum(self.bond_values(x, required_yield=required_yield))
+                   for x in self.bonds if x.holder == person.account)
 
     def net_wealth(self, person):
         return self.accounts[person.account] + person.assets * self.price + self.bond_assets(person) - self.debt(person)
@@ -377,13 +457,16 @@ class MonetarySimulation:
         for bond in [bond for bond in self.bonds if bond.holder == person.account]:
             if needed - proceeds <= EPS:
                 break
-            paid = self.transfer(PRODUCER, person.account, min(needed - proceeds, bond.principal * recovery),
+            liquidation_value = self.bond_market_value(bond) * recovery
+            paid = self.transfer(PRODUCER, person.account, min(needed - proceeds, liquidation_value),
                                  "Collateral bond liquidation")
             if paid:
-                face = paid / recovery
-                self.bonds.append(replace(bond, holder=PRODUCER, principal=face))
+                fraction = min(1, paid / liquidation_value)
+                face, arrears = bond.principal * fraction, bond.arrears * fraction
+                self.bonds.append(replace(bond, holder=PRODUCER, principal=face, arrears=arrears))
                 bond.principal = max(0, bond.principal - face)
-                if bond.principal <= EPS:
+                bond.arrears = max(0, bond.arrears - arrears)
+                if bond.principal + bond.arrears <= EPS:
                     self.bonds.remove(bond)
                 proceeds += paid
         paid = self.transfer(PRODUCER, person.account,
@@ -433,10 +516,15 @@ class MonetarySimulation:
             elif loan.principal + loan.arrears <= EPS:
                 self.loans.remove(loan)
 
-    def sell_bond(self, holder, requested):
+    def sell_bond(self, holder, requested, *, refinance=False):
         if not math.isfinite(requested) or requested < 0:
             raise ValueError("Bond purchases must be finite and non-negative.")
-        room = max(0, self.config.debt_ceiling - self.government_debt)
+        if not self.sovereign_market_access:
+            return 0.0
+        year = self.step_count + 1
+        headroom = max(0, self.config.debt_ceiling - self.government_debt)
+        rollover = sum(b.principal for b in self.bonds if b.maturity <= year) if refinance else 0.0
+        room = headroom + rollover
         amount = min(requested, room, self.credit_room() if holder == BANK else self.accounts[holder])
         if amount <= EPS:
             return 0.0
@@ -446,65 +534,109 @@ class MonetarySimulation:
             self.log(BANK, GOV, amount, "Bank bond purchase creates treasury deposit")
         else:
             self.transfer(holder, GOV, amount, "Government bond purchase")
-        self.bonds.append(Bond(holder, amount, self.config.bond_rate, self.step_count + 1,
-                               self.step_count + 1 + self.config.bond_term))
+        matched = max(0, amount - headroom)
+        coupon = self.config.bond_rate + self.sovereign_spread(additional_debt=amount - matched)
+        self.bonds.append(Bond(holder, amount, coupon, year, year + self.config.bond_term,
+                               last_coupon_year=year))
         self.flows["Borrowing proceeds"] += amount
+        # Above-ceiling funding is earmarked for matched redemption, never
+        # available for coupons or discretionary spending.
+        if matched:
+            matured = [b for b in self.bonds if b.maturity <= year and b.issued < year]
+            self._pay_bonds(matured, principal=True, limit=matched)
+            self.flows["Refinanced principal"] += matched
         return amount
 
     def fund_government(self):
         if self.config.monetary_financing:
             self.issue_money(self.config.issuance_per_step)
-        if not self.config.government_borrowing:
+        self.service_bonds()
+        if not self.config.government_borrowing or not self.sovereign_market_access:
             return
-        target = min(self.config.borrowing_target, max(0, self.config.debt_ceiling - self.government_debt))
+        target = self.config.borrowing_target + self.bond_obligations(self.step_count + 1)
         bank_target = target * self.config.bank_bond_fraction
         household_target = target - bank_target
-        offers = [(p, self.accounts[p.account] * self.config.bond_purchase_fraction) for p in self.population if p.age >= 18]
+        confidence = 1 / (1 + self.config.sovereign_risk_aversion * self.sovereign_spread())
+        offers = [(p, self.accounts[p.account] * self.config.bond_purchase_fraction * confidence)
+                  for p in self.population if p.age >= 18]
         total = sum(amount for _, amount in offers)
         for person, offer in offers:
-            self.sell_bond(person.account, min(household_target, total) * offer / total if total else 0)
-        self.sell_bond(BANK, bank_target)
+            raised = self.sell_bond(person.account, min(household_target, total) * offer / total if total else 0, refinance=True)
+            if raised and self.flows["Debt service shortfall"] > EPS:
+                self.service_bonds()
+        self.sell_bond(BANK, bank_target * confidence, refinance=True)
+        self.service_bonds()
 
-    def service_bonds(self, allowance):
-        existing = [bond for bond in self.bonds if bond.issued < self.step_count + 1]
-        interests = {id(b): b.principal * b.rate for b in existing}
-        principals = {id(b): b.principal if b.maturity <= self.step_count + 1 else 0 for b in existing}
-        self.flows["Debt service due"] = sum(interests.values()) + sum(principals.values())
-        categories = [(principals, "Bond principal repaid"), (interests, "Bond interest paid")]
-        if not self.config.principal_first:
-            categories.reverse()
-        principal_paid = {}
-        for amounts, category in categories:
-            due = sum(amounts.values())
-            available = min(allowance, self.accounts[GOV], due)
-            for bond in existing:
-                amount = available * amounts[id(bond)] / due if due else 0
-                if bond.holder == BANK:
-                    paid = self.bank_payment(GOV, amount, category)
-                    self.flows["Bank bond repayments"] += paid
-                    if category == "Bond interest paid":
-                        self.flows["Bank bond interest received"] += paid
-                else:
-                    paid = self.transfer(GOV, bond.holder, amount, category)
-                    if category == "Bond interest paid":
-                        holder = next((p for p in self.population if p.account == bond.holder), None)
-                        if holder is not None:
-                            holder.income_received += paid
-                self.flows[category] += paid
-                if category == "Bond principal repaid":
-                    principal_paid[id(bond)] = paid
-            allowance -= available
+    def _pay_bonds(self, bonds, *, principal, limit=math.inf):
+        due = sum(b.principal if principal else b.arrears for b in bonds)
+        available = min(limit, self.accounts[GOV], due)
+        if available <= EPS:
+            return
+        category = "Bond principal repaid" if principal else "Bond interest paid"
+        people = {p.account: p for p in self.population}
+        for bond in bonds:
+            obligation = bond.principal if principal else bond.arrears
+            amount = available * obligation / due if due else 0.0
+            if bond.holder == BANK:
+                paid = self.bank_payment(GOV, amount, category)
+                self.flows["Bank bond repayments"] += paid
+                if not principal:
+                    self.flows["Bank bond interest received"] += paid
+            else:
+                paid = self.transfer(GOV, bond.holder, amount, category)
+                if not principal and bond.holder in people:
+                    people[bond.holder].income_received += paid
+            if principal:
+                bond.principal = max(0, bond.principal - paid)
+            else:
+                bond.arrears = max(0, bond.arrears - paid)
+            self.flows[category] += paid
+            self.flows["Debt service spent"] += paid
+        self.bonds = [b for b in self.bonds if b.principal + b.arrears > EPS]
+
+    def service_bonds(self):
+        """Mandatory debt service, repeated safely without double-accruing coupons."""
+        year = self.step_count + 1
+        existing = [b for b in self.bonds if b.issued < year]
         for bond in existing:
-            if bond.maturity <= self.step_count + 1:
-                loss = max(0, bond.principal - principal_paid.get(id(bond), 0))
-                self.flows["Bond principal defaults"] += loss
-                if loss:
-                    if bond.holder == BANK:
-                        self.flows["Bank bond principal losses"] += loss
-                    self.log(GOV, bond.holder, loss, "Matured bond haircut (non-cash)")
-                self.bonds.remove(bond)
-        self.flows["Debt service shortfall"] = max(0, self.flows["Debt service due"] -
-            self.flows["Bond interest paid"] - self.flows["Bond principal repaid"])
+            elapsed = max(0, year - max(bond.issued, bond.last_coupon_year))
+            interest = bond.principal * bond.rate * elapsed
+            bond.arrears += interest
+            bond.last_coupon_year = year
+            self.flows["Bond interest accrued"] += interest
+        due = self.bond_obligations(year)
+        self.flows["Debt service due"] = max(self.flows["Debt service due"], due + self.flows["Debt service spent"])
+        self._pay_bonds(existing, principal=False)
+        matured = [b for b in self.bonds if b.issued < year and b.maturity <= year]
+        self._pay_bonds(matured, principal=True)
+        self.flows["Debt service shortfall"] = self.bond_obligations(year)
+
+    def request_government_default(self):
+        if not self.bonds:
+            raise ValueError("There is no outstanding government bond debt to cancel.")
+        self.sovereign_default_pending = True
+
+    def _execute_government_default(self):
+        self.sovereign_default_pending = False
+        if not self.bonds:
+            return
+        principal = sum(b.principal for b in self.bonds)
+        interest = sum(b.arrears for b in self.bonds)
+        market_loss = self.government_market_debt
+        bank_loss = sum(b.principal for b in self.bonds if b.holder == BANK)
+        for bond in self.bonds:
+            self.log(GOV, bond.holder, bond.principal + bond.arrears, "Sovereign debt repudiation (non-cash)")
+        self.bonds.clear()
+        self.flows["Sovereign debt written off"] += principal + interest
+        self.flows["Sovereign market losses"] += market_loss
+        self.flows["Bank bond principal losses"] += bank_loss
+        self.flows["Sovereign default event"] = 1
+        self.sovereign_default_count += 1
+        self.last_sovereign_default_year = self.step_count + 1
+        self.reputation_spread += self.config.sovereign_default_penalty
+        self.sovereign_events.append({"Year": self.step_count + 1, "Principal cancelled": principal,
+                                     "Interest cancelled": interest, "Creditor market loss": market_loss,
+                                     "Bank principal loss": bank_loss})
 
     def pay_wages(self, potential):
         workers = [p for p in self.population if 18 <= p.age < self.config.retirement_age]
@@ -530,6 +662,7 @@ class MonetarySimulation:
         self.flows["Effective wealth tax rate"] = self.flows["Tax revenue"] / float(taxable.sum()) if taxable.sum() else 0.0
 
     def prepare_budget(self):
+        self.service_bonds()
         self.policy_budget = self.accounts[GOV]
         self.budget_allocations = allocate(self.policy_budget, self.shares)
         self.spent = {name: 0.0 for name in self.budget_allocations}
@@ -552,8 +685,6 @@ class MonetarySimulation:
         self.spent["Pensions"] = pensions
         self.flows["Pension shortfall"] = max(0, len(retirees) * target - pensions)
         self.spent["Healthcare"] = self.transfer(GOV, HEALTH, self.budget_allocations["Healthcare"], "Public healthcare")
-        self.service_bonds(self.budget_allocations["Debt service"])
-        self.spent["Debt service"] = self.flows["Bond interest paid"] + self.flows["Bond principal repaid"]
 
     def buy_capital(self, account, nominal):
         spending = min(nominal, self.accounts[account], self.goods_remaining * self.price)
@@ -730,14 +861,15 @@ class MonetarySimulation:
                     heir.assets += person.assets / len(heirs)
                 for bond in [b for b in self.bonds if b.holder == person.account]:
                     for heir in heirs:
-                        self.bonds.append(replace(bond, holder=heir.account, principal=bond.principal / len(heirs)))
+                        self.bonds.append(replace(bond, holder=heir.account, principal=bond.principal / len(heirs),
+                                                  arrears=bond.arrears / len(heirs)))
                     self.bonds.remove(bond)
             else:
                 self.flows["Estate revenue"] += self.transfer(person.account, GOV, self.accounts[person.account], "Unclaimed estate")
                 self.public_assets += person.assets
                 # Government-held own bonds are cancelled, not counted as revenue.
                 for bond in [b for b in self.bonds if b.holder == person.account]:
-                    self.flows["Estate debt cancellation"] += bond.principal
+                    self.flows["Estate debt cancellation"] += bond.principal + bond.arrears
                     self.bonds.remove(bond)
             del self.accounts[person.account]
         self.population = survivors
@@ -764,7 +896,7 @@ class MonetarySimulation:
     def reset_flows(self):
         names = ("Money issued", "Loans originated", "Loan interest accrued", "Loan interest paid", "Loan principal repaid",
                  "Loan defaults", "Bank bond credit", "Bank bond repayments", "Borrowing proceeds", "Bond interest paid",
-                 "Bond principal repaid", "Bond principal defaults", "Debt service due", "Debt service shortfall", "Wages",
+                 "Bond principal repaid", "Debt service due", "Debt service shortfall", "Wages",
                  "Tax revenue", "Unpaid wealth tax", "Pension shortfall", "Real investment", "Consumption", "Real consumption",
                  "Bank distributions", "Private premiums", "Estate revenue", "Estate debt cancellation", "Deaths",
                  "Observed mortality", "Public healthcare users", "Private healthcare users", "Minimum applied tax rate",
@@ -772,7 +904,10 @@ class MonetarySimulation:
                  "Failed private investments", "Private capital shortfall", "Private capital added",
                  "Opening government money", "Total government spending", "Money balance error",
                  "Base money balance error", "Government balance error", "Loan recoveries", "Loan principal losses",
-                 "Defaulted loans", "Bank bond interest received", "Bank bond principal losses", "Bank realized profit")
+                 "Defaulted loans", "Bank bond interest received", "Bank bond principal losses", "Bank realized profit",
+                 "Debt service spent", "Bond interest accrued", "Refinanced principal", "Sovereign debt written off",
+                 "Sovereign market losses", "Sovereign default event", "Opening government debt",
+                 "Government debt balance error", "Bank bond valuation change")
         self.flows = dict.fromkeys(names, 0.0)
         self.policy_budget = 0.0
         self.budget_allocations = allocate(0, self.shares)
@@ -799,10 +934,17 @@ class MonetarySimulation:
     def step(self):
         if not self.population:
             return False
+        opening_debt = self.government_debt
+        opening_valuation_reserve = self.bank_bond_valuation_reserve
         self.reset_flows()
+        self._in_step = True
+        self.reputation_spread *= 1 - self.config.sovereign_reputation_recovery
+        if self.sovereign_default_pending:
+            self._execute_government_default()
         opening_money, opening_base = self.broad_money, self.reserves
         opening_gov = self.accounts[GOV]
         self.flows["Opening government money"] = opening_gov
+        self.flows["Opening government debt"] = opening_debt
         self.trade_price = self.price
         for p in self.population:
             p.income_received = p.tax_paid = p.interest_paid = p.consumption_paid = p.bank_distribution_received = 0.0
@@ -811,6 +953,7 @@ class MonetarySimulation:
         self.producer_assets *= 1 - self.config.delta
         workers = sum(18 <= p.age < self.config.retirement_age for p in self.population)
         self.output = min(self.capacity, workers * self.config.productivity)
+        self.reference_nominal_output = self.output * self.trade_price
         self.goods_remaining = self.output
         self.pay_wages(self.output)
         self.service_loans()
@@ -837,14 +980,21 @@ class MonetarySimulation:
         self.demographics()
         self.flows["Bank realized profit"] = (self.flows["Loan interest paid"] + self.flows["Bank bond interest received"]
                                              - self.flows["Loan principal losses"] - self.flows["Bank bond principal losses"])
+        self.flows["Bank bond valuation change"] = opening_valuation_reserve - self.bank_bond_valuation_reserve
         created = self.flows["Money issued"] + self.flows["Loans originated"] + self.flows["Bank bond credit"] + self.flows["Bank distributions"]
         destroyed = self.flows["Loan principal repaid"] + self.flows["Loan interest paid"] + self.flows["Bank bond repayments"]
         self.flows["Money balance error"] = self.broad_money - opening_money - created + destroyed
         self.flows["Base money balance error"] = self.reserves - opening_base - self.flows["Money issued"]
+        self.flows["Total government spending"] = sum(self.spent.values()) + self.flows["Debt service spent"]
         self.flows["Government balance error"] = self.accounts[GOV] - (opening_gov + self.flows["Tax revenue"] +
-            self.flows["Borrowing proceeds"] + self.flows["Money issued"] + self.flows["Estate revenue"] - sum(self.spent.values()))
-        self.flows["Total government spending"] = sum(self.spent.values())
+            self.flows["Borrowing proceeds"] + self.flows["Money issued"] + self.flows["Estate revenue"]
+            - self.flows["Total government spending"])
+        self.flows["Government debt balance error"] = self.government_debt - (
+            opening_debt + self.flows["Borrowing proceeds"] + self.flows["Bond interest accrued"]
+            - self.flows["Debt service spent"] - self.flows["Estate debt cancellation"]
+            - self.flows["Sovereign debt written off"])
         self.step_count += 1
+        self._in_step = False
         self.record()
         return True
 
@@ -856,10 +1006,13 @@ class MonetarySimulation:
     def balance_sheets(self):
         household_assets = sum(self.accounts[p.account] + p.assets * self.price + self.bond_assets(p) for p in self.population)
         household_debt = sum(self.debt(p) for p in self.population)
-        producer_bonds = sum(b.principal for b in self.bonds if b.holder == PRODUCER)
-        bank_assets = self.reserves + sum(x.principal + x.arrears for x in self.loans) + sum(b.principal for b in self.bonds if b.holder == BANK)
+        required_yield = self.config.bond_rate + self.sovereign_spread()
+        producer_bonds = sum(sum(self.bond_values(b, required_yield=required_yield))
+                             for b in self.bonds if b.holder == PRODUCER)
+        bank_assets = self.reserves + sum(x.principal + x.arrears for x in self.loans) + sum(
+            sum(self.bond_values(b, required_yield=required_yield)) for b in self.bonds if b.holder == BANK)
         rows = [("Households", household_assets, household_debt),
-                (GOV, self.accounts[GOV] + self.public_assets * self.price, self.government_debt),
+                 (GOV, self.accounts[GOV] + self.public_assets * self.price, self.government_market_debt),
                 (PRODUCER, self.accounts[PRODUCER] + producer_bonds + self.producer_assets * self.price, 0), (HEALTH, self.accounts[HEALTH], 0),
                 (BANK, bank_assets, self.broad_money), ("Monetary authority", 0, self.reserves)]
         return [{"Sector": name, "Assets": assets, "Liabilities": liabilities, "Net worth": assets - liabilities}
@@ -868,7 +1021,9 @@ class MonetarySimulation:
     def person_rows(self):
         return [{"Person": p.person_id, "Age": p.age, "Parent": p.parent_id,
                  "Money": self.accounts[p.account], "Real productive assets": p.assets,
-                 "Bonds": self.bond_assets(p), "Debt": self.debt(p), "Net wealth": self.net_wealth(p),
+                  "Bonds": self.bond_assets(p), "Debt": self.debt(p), "Net wealth": self.net_wealth(p),
+                  "Bond face value": sum(b.principal for b in self.bonds if b.holder == p.account),
+                  "Bond interest arrears": sum(b.arrears for b in self.bonds if b.holder == p.account),
                  "Real net wealth": self.net_wealth(p) / self.price,
                  "UBI": p.ubi_received, "Pension": p.pension_received, "Healthcare": p.healthcare_choice,
                   "Wages": p.income, "Health preference": p.healthcare_preference,
@@ -888,6 +1043,11 @@ class MonetarySimulation:
             "Real net wealth": sum(wealth) / self.price, "Productive capacity": self.capacity, "Output": self.output,
             "Price level": self.price, "Inflation": self.inflation, "Base money": self.reserves, "Broad money": self.broad_money,
             "Government money": self.accounts[GOV], "Government debt": self.government_debt,
+            "Government market debt": self.government_market_debt, "Government arrears": self.government_arrears,
+            "Sovereign spread": self.sovereign_spread(), "New bond yield": self.config.bond_rate + self.sovereign_spread(),
+            "Sovereign defaults": self.sovereign_default_count, "Sovereign market access": self.sovereign_market_access,
+            "Sovereign reputation penalty": self.reputation_spread,
+            "Average bond price": (self.government_market_debt / self.government_debt if self.government_debt > EPS else None),
             "Bank equity": self.bank_equity, "Prudential bank equity": self.prudential_equity,
             "Unpaid loan interest": self.unpaid_interest,
             "Outstanding loans": sum(x.principal + x.arrears for x in self.loans),

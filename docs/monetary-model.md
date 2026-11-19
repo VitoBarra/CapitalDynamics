@@ -26,7 +26,7 @@ financial endowments: consolidated sector net worth equals real capital at
 current prices. These are illustrative settings, not estimates.
 
 Each resident has deposits, real productive capital, bonds and loan obligations.
-Net wealth = deposits + capital × price + bonds at face value − loan principal
+Net wealth = deposits + capital × price + bonds at market value − loan principal
 − accrued unpaid loan interest. Real net wealth divides that balance by the
 price level. A conventional bounded Gini is not reported when net wealth can
 be negative. Sector net worth is shown separately; residents are not assigned
@@ -45,12 +45,12 @@ There is one commercial bank, no physical cash and no interbank market.
 3. Service existing household loans: accrued interest first, then scheduled
    principal. Collect net wealth taxes, limited by liquid money. Uncollected
    tax is reported, not carried as tax arrears.
-4. Issue any permitted fiat grant; sell new government bonds, subject to
-   buyer willingness, bank constraints and the debt ceiling. Bond proceeds
-   and grants are financing, not taxes.
-5. Freeze one common total treasury budget. Reserve each policy's percentage
-   of this total, including debt service. Pay UBI, budget-limited pensions,
-   healthcare and existing bond obligations from their own envelopes.
+4. Issue any permitted fiat grant; pay mandatory bond service and attempt
+   refinancing plus additional policy borrowing, subject to buyer willingness,
+   bank constraints, exclusion and the debt ceiling. Proceeds and grants are
+   financing, not taxes. Carry unpaid obligations forward.
+5. Freeze the remaining treasury policy budget. Reserve four percentages
+   for UBI, budget-limited pensions, healthcare and public investment.
 6. Buy public investment goods; working adults request private investment
    and optional investment credit. Ration private investment goods and credit
    proportionally. Spending moves deposits to producers; purchased goods
@@ -74,37 +74,63 @@ goods-capacity calculation; there are no separate medical workers or queues.
 
 All funding percentages are edited **together** under government settings.
 They must total at most 100%. Defaults are UBI 25%, pensions 20%, healthcare
-25%, investment 15%, debt service 5%, unallocated 10%.
+25%, investment 15%, unallocated 15%. Debt service has no allocation control.
 
-The denominator is **all treasury money available at allocation time**:
-opening money + collected taxes + bond proceeds + fiat grants. Debt service
-does not silently change that denominator. Changing display/section order
-does not change allocations. Unused pension, investment or debt allocations
+The denominator is **treasury money remaining after mandatory debt service**:
+opening money + collected taxes + bond proceeds + fiat grants − debt payments.
+Changing display/section order does not change allocations. Unused policy allocations
 stay in treasury; they do not spill into another policy.
 
 The allocation bar always includes unallocated funds. A second bar shows
 **actual cash expenditure percentages**, with a different denominator: the
-sum actually paid. Tables show allocated, spent and unused amounts. Bond
+sum actually paid to the four policies. Tables show allocated, spent and unused amounts. Bond
 principal repayment is a cash outflow here, not an operating expense.
 Charts describe the last recorded year; policy changes apply next year.
 
 ## Bonds and government shortfalls
 
-Adults offer a configurable fraction of deposits for new bonds. Their
-purchases transfer existing money. The bank can purchase a separate fraction
-of the borrowing target, creating a treasury deposit against a bond asset.
-Both buyer groups purchase at face value. There is no secondary bond market
-or endogenous risk premium. The ceiling limits new issuance, not outstanding
-contracts retroactively. Lowering the ceiling below existing debt freezes new
-issuance until debt falls; it does not cancel debt.
+Debt service is senior to discretionary policies: accrued coupons first, then
+matured principal, pro rata within each category. Unpaid coupons and matured
+principal remain contractual debt; overdue principal continues accruing its
+fixed coupon, while coupon arrears do not compound. Repeated payment attempts
+within one year never accrue the same coupon twice.
 
-Contracts retain their issue-time coupon and maturity. Within the fixed debt
-envelope, choose coupon-first or principal-first. Each category is paid pro
-rata across bondholders. Unpaid coupons are cancelled and reported as debt
-service shortfall (no accumulating sovereign coupon arrears). At maturity,
-unfunded principal is written off and reported explicitly. Bank-held losses
-reduce bank equity. New borrowing can support refinancing, but cannot
-temporarily exceed the debt ceiling.
+When borrowing is enabled, the government seeks unresolved debt service plus
+the additional policy borrowing target. Adults offer a configurable fraction
+of deposits; the bank is offered a separate target share, subject to prudential
+credit capacity. Both offers are reduced by `1 / (1 + risk aversion × spread)`.
+Household purchases transfer deposits; bank purchases create treasury deposits.
+Targets are not guaranteed financing.
+
+The ceiling uses nominal principal plus accrued coupons. Matched issuance and
+immediate redemption can refinance matured principal at the ceiling; such
+earmarked proceeds cannot fund coupons or policies. Accruals can exceed the
+ceiling because existing obligations are never forgiven by an issuance limit.
+
+New bonds issue at par with a fixed coupon equal to reference yield plus
+sovereign spread. The spread combines a baseline, debt / annual nominal output
+(ratio capped at 10), overdue debt / total debt, and a default reputation
+penalty; total spread is capped at 50 percentage points. Output is explicit
+simulation state, not inferred by reading the history table. These are
+illustrative scenario rules, not calibrated probabilities of default.
+
+Existing bonds are valued by discounting remaining coupons and principal at
+the current required yield. Arrears are separately discounted one period;
+overdue claims use a one-year recovery horizon. Thus higher spreads lower
+existing fixed-coupon prices without changing contractual debt or creating
+money. There is no continuous secondary-market order book. Balance sheets
+mirror market-valued creditor assets as market-valued government liabilities;
+nominal obligations are reported separately and still must be paid.
+
+The government controls include a confirmed **Sovereign default** action,
+queued for the next simulated year (and cancellable before execution). It
+repudiates all government bond principal and coupon arrears, not household
+loans or deposits. Residents, producers and the bank lose their claims.
+Bank capital may become negative, freezing credit without an automatic bailout.
+Issuance is blocked in the default year and for the configured full subsequent
+years (default three). Each default adds an 8-percentage-point reputation
+penalty by default, recovering by 10% annually; it persists after exclusion.
+Default events and nominal debt reconciliations are exported and displayed.
 
 ## Banking
 
@@ -140,15 +166,16 @@ equal deposits and liabilities: borrowing alone does not create net wealth.
 Principal repayment destroys deposits and reduces the bank loan asset.
 Interest payments reduce deposits and become bank equity; distributions
 recreate deposits against equity. Unpaid interest accrues as a bank asset and
-borrower liability, but **prudential equity = book equity − all unpaid household
-interest**. Only prudential equity can support new lending and bank distributions.
+borrower liability. **Prudential equity** excludes unpaid household and sovereign
+interest and bond gains above face, while recognizing bond price losses.
+Only prudential equity can support new lending and bank distributions.
 This is a conservative model convention, not full regulatory capital or IFRS 9.
 Contracts keep their original fixed rate, risk premium, installments and maturity.
 
 Consecutive annual missed payments or unpaid maturity balances trigger
 resolution. Liquid cash and discounted collateral sales are collected before
 writing off residual principal and interest. The default recovery discount is
-25% from current capital prices / bond face value. Producer deposits limit
+25% from current capital prices / bond market value. Producer deposits limit
 sales; selling capital changes ownership, not aggregate capital. A discounted
 bond sale transfers the corresponding face-value claim, not the issuer's debt.
 Multiple loans resolve in contract order and share the resident's finite
@@ -158,7 +185,8 @@ Cash-based **Bank realized profit** equals collected household loan interest
 plus coupons received on bank-held bonds, less written-off household loan
 principal and bank-held bond principal losses. Principal repayments, loan issuance,
 unpaid interest and distributions are not income in this measure.
-Prudential equity changes by this profit minus distributions over a full year.
+Prudential equity changes by this profit minus distributions plus the separately
+reported bank bond valuation change (release/increase of conservative markdowns).
 Residual total debt write-offs include interest; principal losses are recorded
 separately to avoid charging unrecognised cash interest as a cash loss.
 

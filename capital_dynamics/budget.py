@@ -1,10 +1,10 @@
 """One denominator and one validation rule for public policy allocations."""
 import math
 
-POLICIES = ("UBI", "Pensions", "Healthcare", "Public investment", "Debt service")
+POLICIES = ("UBI", "Pensions", "Healthcare", "Public investment")
 COLORS = ["#4477AA", "#EE9933", "#228866", "#AA66AA", "#CC5555", "#999999"]
 ALLOCATION_FIELDS = ("ubi_budget_fraction", "pension_budget_fraction",
-                     "healthcare_spending_fraction", "investment_budget_fraction", "debt_service_fraction")
+                     "healthcare_spending_fraction", "investment_budget_fraction")
 
 
 def validate_allocations(shares):

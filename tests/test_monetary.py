@@ -34,7 +34,7 @@ class MonetaryTests(unittest.TestCase):
             sim.advance()
             row = sim.history[-1]
             self.assertEqual(row['Opening government money'], opening)
-            self.assertAlmostEqual(row['Total government spending'], sum(sim.spent.values()))
+            self.assertAlmostEqual(row['Total government spending'], sum(sim.spent.values()) + row['Debt service spent'])
             self.assertAlmostEqual(row['Government money'], opening + row['Tax revenue'] + row['Borrowing proceeds']
                                    + row['Money issued'] + row['Estate revenue'] - row['Total government spending'])
             self.assert_balanced(sim)
@@ -62,7 +62,8 @@ class MonetaryTests(unittest.TestCase):
 
     def economy(self, **changes):
         config = MonetaryConfig(pop_size=3, birth_prob_max=0, death_base_prob=0, aging_risk_rate=0,
-                                healthcare_choice_mode='Public only')
+                                healthcare_choice_mode='Public only', sovereign_base_spread=0,
+                                sovereign_debt_sensitivity=0, sovereign_arrears_sensitivity=0)
         sim = MonetarySimulation(replace(config, **changes))
         for p in sim.population:
             p.age = 30
@@ -168,11 +169,12 @@ class MonetaryTests(unittest.TestCase):
         p, q = sim.population[:2]
         sim.sell_bond(p.account, .5)
         sim.sell_bond(q.account, .5)
+        sim.transfer(GOV, PRODUCER, .6, 'Insufficient treasury cash')
         sim.step_count = 1
-        sim.service_bonds(.4)
-        self.assertFalse(sim.bonds)
+        sim.service_bonds()
+        self.assertEqual(len(sim.bonds), 2)
         self.assertAlmostEqual(sim.flows['Bond principal repaid'], .4)
-        self.assertAlmostEqual(sim.flows['Bond principal defaults'], .6)
+        self.assertAlmostEqual(sim.government_debt, .6)
         self.assertAlmostEqual(sim.flows['Debt service shortfall'], .6)
         self.assertAlmostEqual(sim.accounts[p.account], sim.accounts[q.account])
         self.assert_balanced(sim)
@@ -193,7 +195,7 @@ class MonetaryTests(unittest.TestCase):
 
     def test_printing_can_raise_prices_without_increasing_output(self):
         settings = dict(ubi_budget_fraction=1, pension_budget_fraction=0,
-            healthcare_spending_fraction=0, investment_budget_fraction=0, debt_service_fraction=0,
+            healthcare_spending_fraction=0, investment_budget_fraction=0,
             private_investment_fraction=0, delta=0)
         baseline = self.economy(**settings)
         printing = self.economy(**settings, monetary_financing=True, issuance_per_step=50)

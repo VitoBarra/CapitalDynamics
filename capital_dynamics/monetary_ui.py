@@ -33,13 +33,19 @@ SPECS: dict[str, list[tuple[Any, ...]]] = {
     "allocation": [(name, f"{policy} allocation (% of total budget)", 0.0, 100.0, 1.0)
                    for name, policy in zip(ALLOCATION_FIELDS, POLICIES)],
     "bonds": [("government_borrowing", "Enable government borrowing"),
-              ("borrowing_target", "New borrowing target per year (€)", 0.0, 1000000.0, 1.0),
+              ("borrowing_target", "Additional policy borrowing per year (€)", 0.0, 1000000.0, 1.0),
               ("debt_ceiling", "Government debt ceiling (€)", 0.0, 1000000000.0, 10.0),
-              ("bond_rate", "New bond coupon (%)", 0.0, 100.0, 0.1),
+              ("bond_rate", "Reference bond yield (%)", 0.0, 100.0, 0.1),
               ("bond_term", "New bond maturity (years)", 1, 100, 1),
               ("bond_purchase_fraction", "Adult money offered for bonds (%)", 0.0, 100.0, 1.0),
               ("bank_bond_fraction", "Borrowing target offered to bank (%)", 0.0, 100.0, 1.0),
-              ("principal_first", "Pay principal before coupons within debt allocation")],
+              ("sovereign_base_spread", "Base sovereign spread (%)", 0.0, 50.0, 0.1),
+              ("sovereign_debt_sensitivity", "Spread per debt / output unit (%)", 0.0, 50.0, 0.1),
+              ("sovereign_arrears_sensitivity", "Spread at 100% overdue debt (%)", 0.0, 50.0, 0.5),
+              ("sovereign_default_penalty", "Spread penalty per sovereign default (%)", 0.0, 50.0, 0.5),
+              ("sovereign_reputation_recovery", "Annual reputation penalty recovery (%)", 0.0, 100.0, 1.0),
+              ("sovereign_risk_aversion", "Investor sensitivity to sovereign spread", 0.0, 50.0, 0.5),
+              ("sovereign_exclusion_years", "Full years excluded after sovereign default", 0, 20, 1)],
     "pensions": [("retirement_age", "Retirement age", 18, 150, 1),
                  ("pension_per_person", "Pension target (initial money multiple)", 0.0, 10.0, 0.01),
                  ("index_pensions", "Index pension target to prices")],
@@ -88,7 +94,7 @@ SHORT_LABELS = {**{name: f"{policy} (%)" for name, policy in zip(
     "private_healthcare_premium": "Private premium", "private_healthcare_age_loading": "Age surcharge",
     "loan_demand": "Annual loan demand (%)", "borrowing_limit": "Debt / collateral limit", "default_after": "Missed payments before default",
     "bond_purchase_fraction": "Money offered for bonds (%)", "bank_bond_fraction": "Bank share of new bonds (%)",
-    "principal_first": "Principal before coupons", "capital_ratio": "Minimum capital ratio (%)", "reserve_ratio": "Minimum reserve ratio (%)"}
+    "capital_ratio": "Minimum capital ratio (%)", "reserve_ratio": "Minimum reserve ratio (%)"}
 
 
 def sync_monetary_controls():
@@ -98,6 +104,8 @@ def sync_monetary_controls():
             value = getattr(config, name)
             sync_widget_value(f"m_{name}", float(value * 100) if name in PERCENT else value)
     st.session_state.monetary_notices = {}
+    st.session_state.sovereign_default_notice = None
+    sync_widget_value("m_confirm_sovereign_default", False)
 
 
 def sync_monetary_initial_controls():
@@ -127,7 +135,7 @@ def monetary_controls(group, title):
     with st.popover(title, icon=":material/tune:", key=f"m_settings_{group}",
                     help=f"Open {title.lower()}. Edit values, then click Apply to change future years without restarting the economy."):
         if group == "allocation":
-            st.caption("Each % uses the same total treasury budget, including financing. "
+            st.caption("Each % uses the remaining treasury budget after mandatory debt service and any refinancing. "
                        "Total must be ≤100%; unused funds stay with government.")
         with st.form(f"m_policy_{group}", border=False, enter_to_submit=False):
             policy_fields(SPECS[group], config, prefix="m_", percentages=PERCENT, labels=SHORT_LABELS,
@@ -161,6 +169,41 @@ def load_comparison():
     st.session_state.monetary_reset_error = None
     sync_monetary_controls()
     sync_monetary_initial_controls()
+
+def queue_sovereign_default():
+    sim = st.session_state.monetary_simulation
+    if not st.session_state.get("m_confirm_sovereign_default", False):
+        return
+    try:
+        sim.request_government_default()
+    except ValueError as error:
+        st.session_state.sovereign_default_notice = str(error)
+        return
+    st.session_state.sovereign_default_notice = None
+    st.session_state.monetary_running = False
+
+
+def cancel_sovereign_default():
+    st.session_state.monetary_simulation.sovereign_default_pending = False
+
+
+def sovereign_default_controls(sim):
+    with st.popover("Sovereign default", icon=":material/warning:", key="m_default_menu",
+                    help="Queue total cancellation of government bonds and coupon arrears for the next simulated year. This is not a reset and does not cancel private loans or deposits."):
+        st.warning("Default wipes government bond claims held by residents, producers and the bank. "
+                   "Creditors lose wealth; bank capital can fall below zero. New government borrowing is blocked temporarily "
+                   "and a reputation spread raises future borrowing costs. Deposits are not automatically cancelled or bailed out.")
+        confirmed = st.checkbox("I understand: cancel all government bond debt", key="m_confirm_sovereign_default",
+                                value=widget_default("m_confirm_sovereign_default", False, kind="toggle"),
+                                help="Confirmation is required. Cancellation takes effect when you next advance the simulation; existing wealth/history are not reset.")
+        st.button("Queue sovereign default", key="m_queue_default", on_click=queue_sovereign_default,
+                  disabled=not confirmed or not sim.bonds or sim.sovereign_default_pending,
+                  help="Pause live playback and schedule default for the next simulated year. This action affects government bonds only.")
+        if sim.sovereign_default_pending:
+            st.button("Cancel queued default", key="m_cancel_default", on_click=cancel_sovereign_default,
+                      help="Cancel the pending default before advancing. An already executed default cannot be undone except by resetting the scenario.")
+        if st.session_state.get("sovereign_default_notice"):
+            st.error(st.session_state.sovereign_default_notice)
 
 
 def monetary_trend(history, columns, title, percentage=False, *, domain=None, area=False):
@@ -263,6 +306,8 @@ def monetary_workspace():
                 with st.container(horizontal=True):
                     for group, label in controls:
                         monetary_controls(group, label)
+                    if name == "government":
+                        sovereign_default_controls(sim)
             slots[name] = st.container()
     downloads = st.container()
 
@@ -287,7 +332,12 @@ def monetary_workspace():
                 st.warning("The population is extinct. Reset or create a new scenario.")
             if economy.prudential_equity <= 0:
                 st.warning("The bank has no positive prudential capital: new credit is frozen. Deposits remain book claims; "
-                           "there is no automatic bailout or deposit insurance in this model.")
+                            "there is no automatic bailout or deposit insurance in this model.")
+            if economy.sovereign_default_pending:
+                st.warning("Sovereign default is queued. The next simulated year cancels government bonds and arrears, not household loans or deposits.")
+            if not economy.sovereign_market_access:
+                st.warning("Government bond market access is suspended after sovereign default. "
+                           "Treasury spending must rely on remaining cash, taxes and any permitted fiat grants.")
         with slots["wealth"].container():
             a, b, c = st.columns(3)
             a.metric("Nominal net wealth", euro(last['Net wealth']), border=True, help=METRIC_HELP["Nominal net wealth"])
@@ -299,7 +349,7 @@ def monetary_workspace():
                 monetary_trend(trends, ["Net wealth", "Real net wealth"], "Nominal and real household net wealth")
             with right:
                 monetary_trend(trends, ["Gini"], "Net wealth inequality over time", domain=[0, 1])
-            st.caption("Net wealth = deposits + productive assets at current prices + bonds at face value − loans and accrued interest. "
+            st.caption("Net wealth = deposits + productive assets at current prices + government bonds at market value − loans and accrued interest. "
                        "The bank and public/producer sectors are reported separately, not assigned fictitious household ownership.")
         with slots["living"].container():
             a, b, c = st.columns(3)
@@ -356,12 +406,26 @@ def monetary_workspace():
             a.metric("Government money", euro(economy.accounts['Government']), border=True, help=METRIC_HELP["Government money"])
             b.metric("Government debt", euro(economy.government_debt), border=True, help=METRIC_HELP["Government debt"])
             c.metric("Debt service shortfall", euro(last['Debt service shortfall']), border=True, help=METRIC_HELP["Debt service shortfall"])
+            a, b, c = st.columns(3)
+            a.metric("Government arrears", euro(last["Government arrears"]), border=True, help=METRIC_HELP["Government arrears"])
+            b.metric("Sovereign spread", f"{last['Sovereign spread']:.2%}", border=True, help=METRIC_HELP["Sovereign spread"])
+            c.metric("New bond yield", f"{last['New bond yield']:.2%}", border=True, help=METRIC_HELP["New bond yield"])
+            a, b, c = st.columns(3)
+            a.metric("Mandatory debt service paid", euro(last["Debt service spent"]), border=True, help=METRIC_HELP["Mandatory debt service paid"])
+            b.metric("Average bond price", observed_value(last["Average bond price"], ".3f"), border=True, help=METRIC_HELP["Average bond price"])
+            c.metric("Sovereign defaults", f"{int(last['Sovereign defaults']):,}", border=True, help=METRIC_HELP["Sovereign defaults"])
             a, b = st.columns(2)
             a.metric("Tax revenue last year", euro(last['Tax revenue']), border=True, help=METRIC_HELP["Tax revenue last year"])
             b.metric("Government cash outflows last year", euro(last['Total government spending']), border=True, help=METRIC_HELP["Government cash outflows last year"])
             allocation_view(economy.policy_budget,
                 [last[f"{name} allocation fraction"] for name in economy.budget_allocations], economy.spent, key="monetary")
             st.caption("Last recorded year; active settings apply next year. Debt principal is included as a cash outflow, not an operating expense.")
+            st.caption("Debt service is mandatory and paid before the four policy allocations. "
+                       "If cash is insufficient, refinancing is attempted when borrowing is enabled; otherwise principal and coupons remain owed. "
+                       "The debt ceiling limits net borrowing, but matched redemptions can refinance matured principal without a net increase.")
+            monetary_trend(trends, ["Government debt", "Government market debt", "Government arrears"], "Contractual debt, market value and arrears")
+            monetary_trend(trends, ["Sovereign spread", "New bond yield"], "Sovereign borrowing costs", percentage=True)
+            monetary_trend(trends, ["Average bond price"], "Government bond price per euro of claim")
             left, right = st.columns(2)
             with left:
                 tax_curve(people["Net wealth"].clip(lower=0).to_numpy(), economy.config)
@@ -375,16 +439,21 @@ def monetary_workspace():
                 monetary_trend(trends, ["Government money", "Government debt"], "Government money and debt")
             with right:
                 monetary_trend(trends, ["Tax revenue", "Borrowing proceeds", "Money issued", "Estate revenue"], "Government funding sources")
-            monetary_trend(trends, [f"{p} spent" for p in POLICIES], "Government expenditure by policy", area=True)
+            monetary_trend(trends, [f"{p} spent" for p in (*POLICIES, "Debt service")], "Government expenditure by policy", area=True)
             finance_columns = ["Step", "Opening government money", "Tax revenue", "Borrowing proceeds", "Money issued",
-                               "Estate revenue", *[f"{p} spent" for p in POLICIES],
+                               "Estate revenue", *[f"{p} spent" for p in (*POLICIES, "Debt service")],
                                "Total government spending", "Government money", "Government balance error"]
             with st.expander("Government accounts"):
                 st.dataframe(history[finance_columns].tail(1), hide_index=True,
                              column_config=table_columns(history[finance_columns]),
                              alt="Latest annual government cash reconciliation")
                 st.caption("Closing money = opening money + taxes + borrowing + issuance + estates − policy payments − debt service. "
-                           "Debt principal is a cash outflow, not an operating expense.")
+                            "Debt principal is a cash outflow, not an operating expense.")
+                debt_columns = ["Step", "Opening government debt", "Borrowing proceeds", "Bond interest accrued",
+                                "Debt service spent", "Estate debt cancellation", "Sovereign debt written off",
+                                "Government debt", "Government debt balance error"]
+                st.dataframe(history[debt_columns].tail(1), hide_index=True, column_config=table_columns(history[debt_columns]),
+                             alt="Government nominal debt reconciliation, including carried interest and explicit write-offs")
             if last["Unpaid wealth tax"] > 0:
                 st.caption(f"Uncollected wealth tax due to insufficient liquid money: {euro(last['Unpaid wealth tax'])}. "
                            "This is reported but not carried as tax debt; there is no forced liquidation.")
@@ -445,7 +514,7 @@ def monetary_workspace():
             b.metric("Defaulted loans", f"{int(last['Defaulted loans']):,}", border=True, help=METRIC_HELP["Defaulted loans"])
             c.metric("Loan principal losses", euro(last["Loan principal losses"]), border=True, help=METRIC_HELP["Loan principal losses"])
             monetary_trend(trends, ["Bank equity", "Prudential bank equity", "Unpaid loan interest"],
-                           "Book equity and uncollected interest")
+                           "Market equity, prudential capital and unpaid interest")
             monetary_trend(trends, ["Loan recoveries", "Loan defaults"], "Loan recoveries and residual losses")
             st.caption("Investment loans create deposits and matching liabilities. Repaying principal destroys deposits. "
                        "Interest moves value to bank equity; bank distributions return some to deposits. Defaults reduce bank assets and equity, "
@@ -489,8 +558,15 @@ def monetary_workspace():
                 loans = pd.DataFrame(contracts["loans"])
                 st.dataframe(loans, hide_index=True, column_config=table_columns(loans), alt="Outstanding loans, terms and arrears")
                 st.subheader("Government bond contracts", help="Outstanding government bonds, their holders, annual coupons and repayment years. Existing contracts retain their original terms after policy edits.")
-                bonds = pd.DataFrame(contracts["bonds"])
+                bonds = pd.DataFrame([{**asdict(b), "Market value": economy.bond_market_value(b),
+                                       "Price per euro face": economy.bond_values(b)[0] / b.principal if b.principal else None}
+                                      for b in economy.bonds])
                 st.dataframe(bonds, hide_index=True, column_config=table_columns(bonds), alt="Bondholders, principal, coupon and maturity")
+                if economy.sovereign_events:
+                    st.subheader("Sovereign default history", help="Executed debt repudiations and creditor losses. These are non-cash write-offs, not payments or income.")
+                    events = pd.DataFrame(economy.sovereign_events)
+                    st.dataframe(events, hide_index=True, column_config=table_columns(events),
+                                 alt="Sovereign defaults with cancelled principal, interest and creditor losses")
                 if economy.policy_changes:
                     st.subheader("Policy changes", help="Retained record of applied policy changes and the years they take effect. Draft edits are not recorded; at most 1,000 changes are kept.")
                     changes = pd.DataFrame(economy.policy_changes)
@@ -511,7 +587,9 @@ def monetary_workspace():
                                        }[filename])
                 settings = {"model": "capital-dynamics", "currency": "EUR", "calibration_status": "Illustrative, not fitted",
                             "reference_snapshot": RETRIEVED_ON, "seed": economy.seed, "initial_parameters": asdict(economy.initial_config),
-                            "current_parameters": asdict(economy.config), "policy_changes": list(economy.policy_changes), **contracts}
+                             "current_parameters": asdict(economy.config), "policy_changes": list(economy.policy_changes),
+                             "sovereign_events": list(economy.sovereign_events), "sovereign_default_pending": economy.sovereign_default_pending,
+                             "sovereign_reputation_penalty": economy.reputation_spread, **contracts}
                 st.download_button("Download monetary scenario settings", json.dumps(settings, indent=2), "monetary-scenario.json", "application/json",
                                    help="Export JSON with the seed, initial and active parameters, retained policy changes and current contracts. This documents the run but is not a full save-state checkpoint.")
                 st.caption("History retains 10,000 years; the transaction ledger retains the latest 10,000 entries, including labeled non-cash events. "

@@ -8,12 +8,12 @@ from capital_dynamics.currency import euro
 
 def allocation_view(total, shares, spent, *, title="Policy allocation", key="budget"):
     st.subheader(title, help="Compare reserved shares of the common policy budget with shares of actual expenditure. Hover over a segment for its amount and percentage; unused allocations stay with government.")
-    st.caption(f"Common budget: {euro(total)} · Allocations use this total; spending shares use actual payments. Unused funds are retained.")
+    st.caption(f"Policy budget after mandatory debt service: {euro(total)} · Allocations use this total; spending shares use actual policy payments. Unused funds are retained.")
     data = pd.DataFrame(allocation_rows(total, shares, spent))
     data["Budget"] = "100% of policy budget"
     data["Order"] = range(len(data))
     names = data.Policy.tolist()
-    colors = alt.Scale(domain=names, range=COLORS)
+    colors = alt.Scale(domain=names, range=[*COLORS[:4], COLORS[-1]])
     configured = data.assign(Budget="Budget allocation", Percent=data["Allocation (% of total budget)"], Amount=data.Allocated)
     plotted = configured
     if sum(spent.values()):

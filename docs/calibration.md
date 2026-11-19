@@ -64,8 +64,9 @@ The model therefore now:
    arrears or during a post-default exclusion period.
 4. Sells collateral to a liquidity-constrained producer at a configurable
    discount, then writes off unrecovered principal/interest.
-5. Separates book equity from a conservative capital measure excluding
-   uncollected household interest. Only the latter supports credit and bank
+5. Separates market equity from a conservative capital measure excluding
+   uncollected interest and sovereign bond gains above face, while recognizing
+   bond markdowns. Only the latter supports credit and bank
    distributions. Cash-based profit excludes unpaid interest.
 
 The **35% debt-service ceiling, 20% income reduction, +2 percentage point rate
@@ -74,6 +75,16 @@ weights are model assumptions**. EBA does not prescribe those values here.
 The 0–1 score is not an estimated default probability. Annual missed-payment
 counts do not implement a literal 90-days-past-due default rule.
 This is not a full IFRS 9 expected-loss, non-accrual or regulatory-capital model.
+
+## Sovereign risk assumptions
+
+Mandatory debt service, carried coupon arrears and matched principal refinancing
+are accounting rules, not an estimated government reaction function. The spread
+formula, investor-demand response, 50-percentage-point spread cap, one-year
+overdue-claim valuation horizon, default exclusion and reputation recovery are
+illustrative assumptions. They are not fitted to sovereign yields, default
+frequencies or recovery data. Explicit total repudiation is a scenario action,
+not a forecast or a legal sovereign-bankruptcy procedure.
 
 ## Further official datasets located
 

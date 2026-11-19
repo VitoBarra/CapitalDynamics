@@ -30,7 +30,7 @@ class MonetaryAppTests(unittest.TestCase):
 
     def assert_explanatory_help(self, app):
         for kind in ('number_input', 'selectbox', 'slider', 'select_slider', 'toggle',
-                     'segmented_control', 'button', 'download_button', 'metric'):
+                     'segmented_control', 'button', 'download_button', 'metric', 'checkbox'):
             for element in app.get(kind):
                 with self.subTest(kind=kind, label=element.label):
                     help_text = element.proto.help.strip()
@@ -117,6 +117,37 @@ class MonetaryAppTests(unittest.TestCase):
         self.assertEqual(metric('Prudential bank equity').value, euro(sim.prudential_equity))
         self.assertTrue(any('not the official EU poverty rate' in caption.value for caption in app.caption))
         self.assertIn('Official data references and calibration status', [item.label for item in app.expander])
+
+    def test_sovereign_default_requires_confirmation_and_executes_next_year(self):
+        app = self.app()
+        self.assertNotIn('m_debt_service_fraction', [widget.key for widget in app.number_input])
+        self.assertTrue(app.button(key='m_queue_default').disabled)
+        app.selectbox(key='m_comparison').select('Government bonds')
+        app.button(key='m_load_comparison').click().run()
+        app.number_input(key='m_years').set_value(2)
+        app.button(key='m_advance').click().run()
+        sim = app.session_state.monetary_simulation
+        self.assertGreater(sim.government_debt, 0)
+        self.assertTrue(app.button(key='m_queue_default').disabled)
+        app.checkbox(key='m_confirm_sovereign_default').check().run()
+        self.assertFalse(app.button(key='m_queue_default').disabled)
+        app.button(key='m_queue_default').click().run()
+        self.assertTrue(sim.sovereign_default_pending)
+        self.assertEqual(sim.sovereign_default_count, 0)
+        self.assertFalse(app.session_state.monetary_running)
+        app.button(key='m_cancel_default').click().run()
+        self.assertFalse(sim.sovereign_default_pending)
+        app.button(key='m_queue_default').click().run()
+        app.number_input(key='m_years').set_value(1)
+        app.button(key='m_advance').click().run()
+        self.assertFalse(app.exception)
+        self.assertFalse(sim.sovereign_default_pending)
+        self.assertFalse(sim.bonds)
+        self.assertEqual(sim.sovereign_default_count, 1)
+        self.assertFalse(sim.sovereign_market_access)
+        self.assertGreater(sim.history[-1]['Sovereign debt written off'], 0)
+        self.assertGreater(sim.history[-1]['Sovereign spread'], sim.config.sovereign_base_spread)
+        self.assertIn('Sovereign default history', [heading.value for heading in app.subheader])
 
     def test_budget_is_atomic_and_percentage_inputs_are_not_fractions(self):
         app = self.app()
