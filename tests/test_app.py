@@ -1,255 +1,96 @@
+"""Entrypoint and reporting regressions for the single monetary dashboard."""
 import unittest
 from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
 
 
 class AppTests(unittest.TestCase):
     def app(self):
-        return AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=30).run()
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=40).run()
+        self.assertFalse(app.exception)
+        return app
 
-    def test_private_investment_risk_controls_apply_to_the_model(self):
+    def test_monetary_is_the_only_dashboard(self):
         app = self.app()
-        app.number_input(key='config_investment_risk').set_value(1.0)
-        app.number_input(key='config_failed_investment_loss').set_value(0.5)
-        app.number_input(key='config_gain_prob').set_value(1.0)
-        app.number_input(key='config_gain_fraction').set_value(1.0)
-        app.button(key='apply_private_investments').click().run()
-        self.assertFalse(app.exception)
-        self.assertEqual(app.session_state.simulation.config.investment_risk, 1.0)
-        self.assertEqual(app.session_state.simulation.config.failed_investment_loss, 0.5)
-        app.number_input(key='batch_steps').set_value(1)
-        app.button(key='advance').click().run()
-        self.assertFalse(app.exception)
-        self.assertEqual(app.session_state.simulation.history[-1]['Failed private investments'], app.session_state.simulation.config.pop_size)
-        self.assertGreater(app.session_state.simulation.history[-1]['Private investment losses'], 0)
+        self.assertNotIn('economic_model', [w.key for w in app.segmented_control])
+        self.assertNotIn('simulation', app.session_state)
+        self.assertEqual(app.session_state.monetary_simulation.step_count, 0)
+        self.assertEqual(len(app.header), 9)
 
-    def test_healthcare_controls_and_age_curves(self):
+    def test_reporting_and_downloads_cover_legacy_categories(self):
         app = self.app()
-        self.assertNotIn('config_max_age', [widget.key for widget in app.number_input])
-        app.number_input(key='config_mortality_doubling_years').set_value(8.0)
-        app.button(key='apply_demographics').click().run()
-        self.assertEqual(app.session_state.simulation.config.mortality_doubling_years, 8.0)
-        app.number_input(key='budget_percent_healthcare_spending_fraction').set_value(35.0)
-        app.button(key='apply_budget').click().run()
-        app.number_input(key='config_healthcare_response_rate').set_value(1.0)
-        app.button(key='apply_healthcare').click().run()
-        app.number_input(key='config_tau_base').set_value(0.01)
-        app.button(key='apply_taxes').click().run()
-        app.number_input(key='batch_steps').set_value(1)
-        app.button(key='advance').click().run()
-        self.assertFalse(app.exception)
-        sim = app.session_state.simulation
-        self.assertGreater(sim.healthcare_spending, 0)
-        self.assertLess(sim.mortality_rate, sim.config.death_base_prob)
-        self.assertGreater(sim.death_probability(80, 1), sim.death_probability(20, 1))
+        titles = [s.value for s in app.subheader]
+        for title in ('Net wealth of each individual', 'Wealth by population percentile',
+                      'Net wealth inequality over time', 'Real household net wealth and productive capacity',
+                      'Population and deaths', 'Government money and debt', 'Current net wealth tax curve',
+                      'Applied net wealth tax rates', 'Government expenditure by policy',
+                      'Mortality over time', 'Healthcare funding', 'Healthcare choices over time',
+                      'Private investment outcomes'):
+            self.assertIn(title, titles)
+        labels = [w.label for w in app.get('download_button')]
+        for label in ('Download monetary history CSV', 'Download monetary population CSV',
+                      'Download finance ledger CSV', 'Download monetary scenario settings',
+                      'Download transaction ledger CSV', 'Download sector balance sheets CSV'):
+            self.assertIn(label, labels)
 
-    def test_pension_and_private_care_controls_affect_personal_wealth(self):
+    def test_policy_edits_preserve_live_economy(self):
         app = self.app()
-        app.number_input(key='budget_percent_pension_budget_fraction').set_value(30.0)
-        app.button(key='apply_budget').click().run()
-        app.number_input(key='config_retirement_age').set_value(0)
-        app.button(key='apply_pensions').click().run()
-        app.number_input(key='config_tau_base').set_value(0.01)
-        app.button(key='apply_taxes').click().run()
-        app.selectbox(key='config_healthcare_choice_mode').select('Private if affordable')
-        app.button(key='apply_private_healthcare').click().run()
-        app.number_input(key='batch_steps').set_value(1)
-        app.button(key='advance').click().run()
+        app.segmented_control(key='m_mode').set_value('Live').run()
+        app.button(key='m_toggle_live').click().run()
+        sim = app.session_state.monetary_simulation
+        history = list(sim.history)
+        year = sim.step_count
+        app.number_input(key='m_tau_base').set_value(1.0)
+        app.button(key='m_apply_taxes').click().run()
         self.assertFalse(app.exception)
-        sim = app.session_state.simulation
-        self.assertGreater(sim.pension_spending, 0)
-        self.assertGreater(sim.private_healthcare_revenue, 0)
-        self.assertTrue(any(p.pension_received > 0 and p.healthcare_premium > 0 for p in sim.population))
-        self.assertAlmostEqual(sim.history[-1]['Government balance error'], 0)
+        self.assertIs(sim, app.session_state.monetary_simulation)
+        self.assertTrue(app.session_state.monetary_running)
+        self.assertEqual(sim.config.tau_base, .01)
+        self.assertEqual(sim.step_count, year + 1)
+        self.assertEqual(list(sim.history)[:len(history)], history)
 
-    def test_policy_changes_keep_the_running_economy_and_history(self):
+    def test_invalid_tax_policy_is_atomic(self):
         app = self.app()
-        app.segmented_control(key='mode').set_value('Live').run()
-        app.button(key='toggle_live').click().run()
-        before = app.session_state.simulation
-        history = list(before.history)
-        old_step = before.step_count
-        app.number_input(key='config_tau_base').set_value(0.01)
-        app.button(key='apply_taxes').click().run()
+        sim = app.session_state.monetary_simulation
+        config = sim.config
+        app.number_input(key='m_tau_base').set_value(80.0)
+        app.number_input(key='m_tau_max').set_value(20.0)
+        app.button(key='m_apply_taxes').click().run()
         self.assertFalse(app.exception)
-        self.assertTrue(app.session_state.running)
-        self.assertIs(before, app.session_state.simulation)
-        self.assertEqual(before.config.tau_base, 0.01)
-        self.assertEqual(before.step_count, old_step + 1)
-        self.assertEqual(list(before.history)[:len(history)], history)
-        self.assertGreater(before.history[-1]['Tax revenue'], 0)
-        self.assertEqual(before.policy_changes[-1]['Effective step'], old_step + 1)
-        app.button(key='toggle_live').click().run()
-        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(0.0)
-        app.number_input(key='budget_percent_pension_budget_fraction').set_value(0.0)
-        app.number_input(key='budget_percent_healthcare_spending_fraction').set_value(80.0)
-        app.button(key='apply_budget').click().run()
-        self.assertEqual(before.step_count, old_step + 1)
-        self.assertEqual(before.config.healthcare_spending_fraction, 0.8)
-        self.assertFalse(app.session_state.running)
-        app.button(key='single_step').click().run()
-        self.assertGreater(before.healthcare_spending, 0)
-        self.assertFalse(app.exception)
+        self.assertEqual(sim.config, config)
+        self.assertTrue(app.error)
 
-    def test_invalid_tax_policy_keeps_the_active_config(self):
+    def test_new_scenario_and_display_changes(self):
         app = self.app()
-        before = app.session_state.simulation.config
-        app.number_input(key='config_tau_base').set_value(0.8)
-        app.number_input(key='config_tau_max').set_value(0.2)
-        app.button(key='apply_taxes').click().run()
+        self.assertTrue(all(not f.proto.form.enter_to_submit for f in app.get('form')))
+        app.number_input(key='m_seed').set_value(425)
+        app.number_input(key='m_initial_population').set_value(10)
+        app.button(key='m_new_scenario').click().run()
+        sim = app.session_state.monetary_simulation
+        self.assertEqual(sim.seed, 425)
+        self.assertEqual(len(sim.population), 10)
+        app.number_input(key='m_years').set_value(2)
+        app.button(key='m_advance').click().run()
+        app.slider(key='m_groups').set_value(5).run()
         self.assertFalse(app.exception)
-        self.assertEqual(app.session_state.simulation.config, before)
-        self.assertTrue(any('maximum tax rate' in e.value for e in app.error))
+        self.assertIs(sim, app.session_state.monetary_simulation)
+        self.assertEqual(sim.step_count, 2)
 
-    def test_old_session_is_repaired_before_a_policy_callback(self):
+    def test_old_monetary_history_is_not_backfilled(self):
         app = self.app()
-        app.number_input(key='batch_steps').set_value(3)
-        app.button(key='advance').click().run()
-        previous = app.session_state.simulation
-        history = list(previous.history)
-        del previous.policy_changes
-        del previous.initial_config
-        app.number_input(key='config_tau_base').set_value(0.01)
-        app.button(key='apply_taxes').click().run()
+        sim = app.session_state.monetary_simulation
+        missing = ('Opening government money', 'Total government spending', 'Government balance error',
+                   'Failed private investments', 'Private capital added', 'Private capital shortfall')
+        for key in missing:
+            sim.history[0].pop(key)
+        app.run()
         self.assertFalse(app.exception)
-        restored = app.session_state.simulation
-        self.assertEqual(restored.step_count, 3)
-        self.assertEqual(list(restored.history), history)
-        self.assertEqual(restored.config.tau_base, 0.01)
-        self.assertEqual(restored.policy_changes[-1]['Effective step'], 4)
-        app.number_input(key='batch_steps').set_value(1)
-        app.button(key='advance').click().run()
+        self.assertTrue(all(key not in sim.history[0] for key in missing))
+        app.number_input(key='m_years').set_value(1)
+        app.button(key='m_advance').click().run()
         self.assertFalse(app.exception)
-        self.assertEqual(restored.step_count, 4)
-
-    def test_metrics_and_tax_curve_are_in_the_relevant_sections(self):
-        app = self.app()
-        self.assertFalse(app.exception)
-        nodes = list(app)
-        def heading(title):
-            return next(i for i,n in enumerate(nodes) if n.type == 'header' and n.value == title)
-        gini = next(i for i,n in enumerate(nodes) if n.type == 'metric' and n.label == 'Gini coefficient')
-        self.assertFalse(any(n.label == 'Personal wealth' for n in app.metric))
-        budget = next(i for i,n in enumerate(nodes) if n.type == 'metric' and n.label == 'Government budget')
-        self.assertLess(heading('Current wealth distribution'), gini)
-        self.assertLess(gini, heading('Economy over time'))
-        self.assertLess(heading('Government budget and taxes'), budget)
-        self.assertLess(budget, heading('UBI and pensions'))
-        self.assertLess(heading('UBI and pensions'), heading('Healthcare, aging and mortality'))
-        for key in ('config_tau_base', 'config_tau_max', 'config_tau_gamma'):
-            index = next(i for i, n in enumerate(nodes) if n.type == 'number_input' and n.key == key)
-            self.assertLess(heading('Government budget and taxes'), index)
-            self.assertLess(index, heading('UBI and pensions'))
-        for label in ('UBI spending this step', 'UBI per person', 'Pension spending', 'Unfunded pension entitlement'):
-            index = next(i for i, n in enumerate(nodes) if n.type == 'metric' and n.label == label)
-            self.assertLess(heading('UBI and pensions'), index)
-            self.assertLess(index, heading('Healthcare, aging and mortality'))
-        for key in ('config_retirement_age', 'config_pension_per_person'):
-            index = next(i for i, n in enumerate(nodes) if n.type == 'number_input' and n.key == key)
-            self.assertLess(heading('UBI and pensions'), index)
-            self.assertLess(index, heading('Healthcare, aging and mortality'))
-        for key in ('budget_percent_direct_redistribution_fraction', 'budget_percent_pension_budget_fraction',
-                    'budget_percent_healthcare_spending_fraction', 'budget_percent_investment_budget_fraction'):
-            index = next(i for i, n in enumerate(nodes) if n.type == 'number_input' and n.key == key)
-            self.assertLess(heading('Government budget and taxes'), index)
-            self.assertLess(index, heading('UBI and pensions'))
-        self.assertTrue(any(n.value == 'Current wealth tax curve' for n in app.subheader))
-        self.assertTrue(any(n.label == 'UBI per person' for n in app.metric))
-
-    def test_ubi_and_taxes_apply_independently(self):
-        app = self.app()
-        sim = app.session_state.simulation
-        original_ubi = sim.config.direct_redistribution_fraction
-        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(40.0)
-        app.number_input(key='config_tau_base').set_value(0.01)
-        app.button(key='apply_taxes').click().run()
-        self.assertEqual(sim.config.tau_base, 0.01)
-        self.assertEqual(sim.config.direct_redistribution_fraction, original_ubi)
-        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(40.0)
-        app.button(key='apply_budget').click().run()
-        self.assertFalse(app.exception)
-        self.assertEqual(sim.config.direct_redistribution_fraction, 0.4)
-        self.assertEqual(sim.config.tau_base, 0.01)
-        self.assertEqual(sim.step_count, 0)
-
-    def test_load_defaults_resets_active_and_displayed_parameters(self):
-        app = self.app()
-        app.number_input(key='config_pop_size').set_value(10)
-        app.button(key='new_scenario').click().run()
-        app.number_input(key='config_tau_base').set_value(0.01)
-        app.button(key='apply_taxes').click().run()
-        app.button(key='load_defaults').click().run()
-        self.assertFalse(app.exception)
-        self.assertEqual(app.session_state.simulation.step_count, 0)
-        self.assertEqual(app.session_state.simulation.config.pop_size, 100)
-        self.assertEqual(app.number_input(key='config_pop_size').value, 100)
-        self.assertEqual(app.session_state.simulation.config.logistic_capacity, 200.0)
-        self.assertEqual(app.number_input(key='config_logistic_capacity').value, 200.0)
-        self.assertEqual(app.number_input(key='config_tau_base').value, 0.005)
-
-    def test_scenario_inputs_use_explicit_submission(self):
-        app = self.app()
-        self.assertTrue(all(not form.proto.form.enter_to_submit for form in app.get('form')))
-        app.number_input(key='seed').set_value(425)
-        app.button(key='new_scenario').click().run()
-        self.assertFalse(app.exception)
-        self.assertEqual(app.session_state.simulation.seed, 425)
-
-    def test_budget_percentages_validate_together(self):
-        app = self.app()
-        sim = app.session_state.simulation
-        original = sim.config
-        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(90.0)
-        app.button(key='apply_budget').click().run()
-        self.assertEqual(sim.config, original)
-        self.assertTrue(any('100%' in e.value for e in app.error))
-        app.number_input(key='budget_percent_direct_redistribution_fraction').set_value(10.0)
-        app.number_input(key='budget_percent_healthcare_spending_fraction').set_value(40.0)
-        app.button(key='apply_budget').click().run()
-        self.assertFalse(app.exception)
-        self.assertEqual(sim.config.healthcare_spending_fraction, .4)
-        self.assertEqual(sim.config.direct_redistribution_fraction, .1)
-
-    def test_dashboard_supports_fragment_only_refreshes(self):
-        source = (Path(__file__).resolve().parents[1] / 'app.py').read_text()
-        source += '\n\ndef refresh_dashboard():\n    st.rerun("dashboard")\n'
-        source += '\nst.button("Refresh dashboard", key="test_refresh", on_click=refresh_dashboard)\n'
-        app = AppTest.from_string(source, default_timeout=30).run()
-        self.assertFalse(app.exception)
-        app.button(key='test_refresh').click().run()
-        self.assertFalse(app.exception)
-        self.assertEqual(len(app.get('vega_lite_chart')), 16)
-
-    def test_batch_live_pause_resume_and_reset(self):
-        app = self.app()
-        self.assertFalse(app.exception)
-        self.assertEqual(len(app.get('vega_lite_chart')), 16)
-        app.number_input(key='batch_steps').set_value(5)
-        app.button(key='advance').click().run()
-        self.assertEqual(app.session_state.simulation.step_count, 5)
-        app.segmented_control(key='mode').set_value('Live').run()
-        self.assertEqual(app.button(key='toggle_live').label, 'Resume')
-        app.button(key='single_step').click().run()
-        self.assertEqual(app.session_state.simulation.step_count, 6)
-        self.assertEqual(app.button(key='toggle_live').label, 'Resume')
-        app.button(key='toggle_live').click().run()
-        self.assertTrue(app.session_state.running)
-        self.assertEqual(app.button(key='toggle_live').label, 'Pause')
-        self.assertTrue(app.button(key='single_step').disabled)
-        before = app.session_state.simulation.step_count
-        app.button(key='toggle_live').click().run()
-        self.assertFalse(app.session_state.running)
-        self.assertEqual(app.button(key='toggle_live').label, 'Resume')
-        self.assertFalse(app.button(key='single_step').disabled)
-        self.assertEqual(app.session_state.simulation.step_count, before)
-        app.slider(key='groups').set_value(5).run()
-        self.assertEqual(app.session_state.simulation.step_count, before)
-        app.button(key='toggle_live').click().run()
-        self.assertGreater(app.session_state.simulation.step_count, before)
-        app.button(key='reset').click().run()
-        self.assertEqual(app.session_state.simulation.step_count, 0)
-        self.assertFalse(app.session_state.running)
-        self.assertFalse(app.exception)
+        self.assertTrue(all(key in sim.history[-1] for key in missing))
 
 
 if __name__ == '__main__':

@@ -29,8 +29,8 @@ class MonetaryConfig:
     pop_size: int = BASE.pop_size
     init_wealth: float = BASE.init_wealth  # Initial deposits per resident.
     logistic_capacity: float = BASE.logistic_capacity  # Initial real capital, not a cap.
-    tau_base: float = BASE.tau_base
-    tau_max: float = BASE.tau_max
+    tau_base: float = 0.0
+    tau_max: float = 0.6
     tau_gamma: float = BASE.tau_gamma
     direct_redistribution_fraction: float = BASE.direct_redistribution_fraction
     pension_budget_fraction: float = BASE.pension_budget_fraction
@@ -400,10 +400,13 @@ class MonetarySimulation:
     def collect_taxes(self):
         taxable = np.array([max(0, self.net_wealth(p)) for p in self.population])
         rates = wealth_tax_rates(taxable, self.config)
+        self.flows["Minimum applied tax rate"] = float(rates.min()) if len(rates) else 0.0
+        self.flows["Maximum applied tax rate"] = float(rates.max()) if len(rates) else 0.0
         due = sum(taxable * rates)
         for person, wealth, rate in zip(self.population, taxable, rates):
             self.flows["Tax revenue"] += self.transfer(person.account, GOV, wealth * rate, "Net wealth tax")
         self.flows["Unpaid wealth tax"] = max(0, due - self.flows["Tax revenue"])
+        self.flows["Effective wealth tax rate"] = self.flows["Tax revenue"] / float(taxable.sum()) if taxable.sum() else 0.0
 
     def prepare_budget(self):
         self.policy_budget = self.accounts[GOV]
@@ -415,6 +418,8 @@ class MonetarySimulation:
             p.ubi_received = self.transfer(GOV, p.account, self.budget_allocations["UBI"] / len(self.population), "UBI")
             self.spent["UBI"] += p.ubi_received
         retirees = [p for p in self.population if p.age >= self.config.retirement_age]
+        self.flows["Pension eligible"] = len(retirees)
+        self.flows["UBI per person"] = self.spent["UBI"] / len(self.population) if self.population else 0.0
         target = self.config.pension_per_person * self.config.init_wealth * (self.price if self.config.index_pensions else 1)
         pensions = min(self.budget_allocations["Pensions"], len(retirees) * target)
         for p in self.population:
@@ -457,8 +462,13 @@ class MonetarySimulation:
             self.originate_loan(person, loan * credit_scale * scale)
             units, _ = self.buy_capital(person.account, desire * scale)
             efficiency = self.config.base_eff
-            if self.rng.rand() < self.config.investment_risk:
+            failed = self.rng.rand() < self.config.investment_risk
+            if failed:
                 efficiency *= 1 - self.config.failed_investment_loss
+            if units > 0:
+                self.flows["Failed private investments"] += int(failed)
+                self.flows["Private capital shortfall"] += units * (self.config.base_eff - efficiency)
+                self.flows["Private capital added"] += units * efficiency
             person.assets += units * efficiency
 
     def consume(self):
@@ -507,6 +517,8 @@ class MonetarySimulation:
     private_premium = Simulation.private_premium
 
     def update_health(self):
+        self.flows["Public healthcare users"] = 0
+        self.flows["Private healthcare users"] = 0
         real_funding = self.spent["Healthcare"] / self.trade_price / max(len(self.population), 1) / self.config.init_wealth
         target = self.config.mortality_floor_fraction + (1 - self.config.mortality_floor_fraction) / (
             1 + self.config.healthcare_effectiveness * real_funding)
@@ -526,6 +538,9 @@ class MonetarySimulation:
                 p.healthcare_premium = self.transfer(p.account, HEALTH, premium, "Private healthcare premium")
                 p.healthcare_choice = "Private"
                 self.flows["Private premiums"] += p.healthcare_premium
+                self.flows["Private healthcare users"] += 1
+            else:
+                self.flows["Public healthcare users"] += 1
 
     def individual_death_probability(self, person):
         return (self.private_death_probability(person.age, 0) if person.healthcare_choice == "Private"
@@ -582,6 +597,7 @@ class MonetarySimulation:
     def demographics(self):
         dead = {p.person_id for p in self.population if self.rng.rand() < self.individual_death_probability(p)}
         self.flows["Deaths"] = len(dead)
+        self.flows["Observed mortality"] = len(dead) / len(self.population) if self.population else 0.0
         self.settle_estates(dead)
         newborns = []
         for p in self.population:
@@ -601,7 +617,12 @@ class MonetarySimulation:
                  "Loan defaults", "Bank bond credit", "Bank bond repayments", "Borrowing proceeds", "Bond interest paid",
                  "Bond principal repaid", "Bond principal defaults", "Debt service due", "Debt service shortfall", "Wages",
                  "Tax revenue", "Unpaid wealth tax", "Pension shortfall", "Real investment", "Consumption", "Real consumption",
-                 "Bank distributions", "Private premiums", "Estate revenue", "Estate debt cancellation", "Deaths")
+                 "Bank distributions", "Private premiums", "Estate revenue", "Estate debt cancellation", "Deaths",
+                 "Observed mortality", "Public healthcare users", "Private healthcare users", "Minimum applied tax rate",
+                 "Maximum applied tax rate", "Effective wealth tax rate", "Pension eligible", "UBI per person",
+                 "Failed private investments", "Private capital shortfall", "Private capital added",
+                 "Opening government money", "Total government spending", "Money balance error",
+                 "Base money balance error", "Government balance error")
         self.flows = dict.fromkeys(names, 0.0)
         self.policy_budget = 0.0
         self.budget_allocations = allocate(0, self.shares)
@@ -631,6 +652,7 @@ class MonetarySimulation:
         self.reset_flows()
         opening_money, opening_base = self.broad_money, self.reserves
         opening_gov = self.accounts[GOV]
+        self.flows["Opening government money"] = opening_gov
         self.trade_price = self.price
         for p in self.population:
             p.assets *= 1 - self.config.delta
@@ -661,6 +683,7 @@ class MonetarySimulation:
         self.flows["Base money balance error"] = self.reserves - opening_base - self.flows["Money issued"]
         self.flows["Government balance error"] = self.accounts[GOV] - (opening_gov + self.flows["Tax revenue"] +
             self.flows["Borrowing proceeds"] + self.flows["Money issued"] + self.flows["Estate revenue"] - sum(self.spent.values()))
+        self.flows["Total government spending"] = sum(self.spent.values())
         self.step_count += 1
         self.record()
         return True
@@ -688,6 +711,7 @@ class MonetarySimulation:
                  "Bonds": self.bond_assets(p), "Debt": self.debt(p), "Net wealth": self.net_wealth(p),
                  "Real net wealth": self.net_wealth(p) / self.price,
                  "UBI": p.ubi_received, "Pension": p.pension_received, "Healthcare": p.healthcare_choice,
+                 "Wages": p.income, "Health preference": p.healthcare_preference,
                  "Private premium": p.healthcare_premium, "Death probability": self.individual_death_probability(p)}
                 for p in self.population]
 
@@ -702,6 +726,7 @@ class MonetarySimulation:
             "Government money": self.accounts[GOV], "Government debt": self.government_debt,
             "Bank equity": self.bank_equity, "Outstanding loans": sum(x.principal + x.arrears for x in self.loans),
             "Gini": gini, "Policy budget": self.policy_budget, "Public mortality": self.mortality_rate,
+            "Baseline mortality": self.config.death_base_prob, "Healthcare sector money": self.accounts[HEALTH],
             **{f"{k} spent": v for k, v in self.spent.items()},
             **{f"{name} allocation fraction": share for name, share in zip(self.budget_allocations, self.shares)},
             **{f"{k} allocated": v for k, v in self.budget_allocations.items()}, **self.flows})
@@ -718,6 +743,22 @@ def comparison_config(name):
         "Monetary financing": {"monetary_financing": True, "issuance_per_step": 2.0},
     }
     return MonetaryConfig(**presets[name])
+
+
+def restore_monetary_simulation(previous):
+    """Rebind hot-reloaded sessions to current code without resetting their economy.
+
+    Existing tax rates, contracts, random state and history are retained. New
+    observations start on the next step, never backfilled into old history.
+    """
+    if isinstance(previous, MonetarySimulation):
+        return previous
+    restored = object.__new__(MonetarySimulation)
+    restored.__dict__.update(previous.__dict__)
+    known = {field.name for field in fields(MonetaryConfig)}
+    restored.config = MonetaryConfig(**{k: v for k, v in asdict(previous.config).items() if k in known})
+    restored.initial_config = MonetaryConfig(**{k: v for k, v in asdict(previous.initial_config).items() if k in known})
+    return restored
 
 
 COMPARISON_NAMES = ("No credit or printing", "Government bonds", "Individual credit", "Fixed broad money ceiling",

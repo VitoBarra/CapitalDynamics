@@ -7,7 +7,6 @@ from streamlit.testing.v1 import AppTest
 class MonetaryAppTests(unittest.TestCase):
     def app(self):
         app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'), default_timeout=40).run()
-        app.segmented_control(key='economic_model').set_value('Monetary economy').run()
         self.assertFalse(app.exception)
         return app
 
@@ -21,6 +20,13 @@ class MonetaryAppTests(unittest.TestCase):
         self.assertEqual(app.number_input(key='m_initial_population').value, 100)
         self.assertEqual(app.number_input(key='m_initial_capacity').value, 200)
         self.assertEqual(app.number_input(key='m_healthcare_spending_fraction').value, 25)
+        self.assertEqual(app.number_input(key='m_tau_base').value, 0)
+        self.assertEqual(app.number_input(key='m_tau_max').value, 60)
+        # Defaults must be in the widget proto, not only session-state overrides:
+        # otherwise closed settings can remount at their minima after live ticks.
+        self.assertEqual(app.number_input(key='m_tau_max').proto.default, 60)
+        self.assertEqual(app.number_input(key='m_direct_redistribution_fraction').proto.default, 25)
+        self.assertEqual(app.number_input(key='m_initial_producer').proto.default, 100)
 
     def test_budget_is_atomic_and_percentage_inputs_are_not_fractions(self):
         app = self.app()
@@ -60,9 +66,8 @@ class MonetaryAppTests(unittest.TestCase):
         self.assertGreater(sim.history[-1]['Loans originated'], 0)
         self.assertAlmostEqual(sim.history[-1]['Money balance error'], 0)
 
-    def test_comparison_reset_and_switching_models(self):
+    def test_comparison_reset_and_retained_economy(self):
         app = self.app()
-        legacy = app.session_state.simulation
         app.selectbox(key='m_comparison').select('Government bonds')
         app.button(key='m_load_comparison').click().run()
         sim = app.session_state.monetary_simulation
@@ -70,9 +75,7 @@ class MonetaryAppTests(unittest.TestCase):
         app.number_input(key='m_years').set_value(2)
         app.button(key='m_advance').click().run()
         self.assertGreater(sim.government_debt, 0)
-        app.segmented_control(key='economic_model').set_value('Legacy economy').run()
-        self.assertIs(legacy, app.session_state.simulation)
-        app.segmented_control(key='economic_model').set_value('Monetary economy').run()
+        app.run()
         self.assertIs(sim, app.session_state.monetary_simulation)
         self.assertFalse(app.session_state.monetary_running)
         app.button(key='m_reset').click().run()
@@ -83,6 +86,7 @@ class MonetaryAppTests(unittest.TestCase):
     def test_live_pause_and_single_year(self):
         app = self.app()
         app.segmented_control(key='m_mode').set_value('Live').run()
+        self.assertEqual(app.button(key='m_toggle_live').label, 'Start')
         app.button(key='m_single_step').click().run()
         self.assertEqual(app.session_state.monetary_simulation.step_count, 1)
         app.button(key='m_toggle_live').click().run()
@@ -91,10 +95,43 @@ class MonetaryAppTests(unittest.TestCase):
         year = app.session_state.monetary_simulation.step_count
         app.button(key='m_toggle_live').click().run()
         self.assertFalse(app.session_state.monetary_running)
+        self.assertEqual(app.button(key='m_toggle_live').label, 'Resume')
         self.assertEqual(app.session_state.monetary_simulation.step_count, year)
         app.button(key='m_single_step').click().run()
         self.assertFalse(app.exception)
         self.assertEqual(app.session_state.monetary_simulation.step_count, year + 1)
+
+    def test_restored_charts_and_display_controls(self):
+        app = self.app()
+        titles = [s.value for s in app.subheader]
+        for title in ('Wealth by population percentile', 'Net wealth inequality over time', 'Current net wealth tax curve',
+                      'Applied net wealth tax rates', 'Government money and debt', 'Mortality over time', 'Healthcare choices over time'):
+            self.assertIn(title, titles)
+        charts = len(app.get('vega_lite_chart'))
+        app.slider(key='m_groups').set_value(5).run()
+        app.select_slider(key='m_age_bin').set_value(5).run()
+        app.segmented_control(key='m_age_unit').set_value('People').run()
+        app.toggle(key='m_log_wealth').set_value(True).run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.get('vega_lite_chart')), charts)
+        self.assertEqual(app.session_state.monetary_simulation.step_count, 0)
+        app.toggle(key='m_show_individuals').set_value(False).run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.get('vega_lite_chart')), charts - 1)
+
+    def test_settings_are_flat_borderless_forms_with_compact_budget_fields(self):
+        app = self.app()
+        for form in app.get('form'):
+            self.assertFalse(form.proto.form.border)
+        self.assertTrue(any(n.key == 'm_settings_allocation' for n in app.get('popover')))
+        self.assertEqual(app.number_input(key='m_direct_redistribution_fraction').label, 'UBI (%)')
+        app.number_input(key='m_tau_max').set_value(50.0)
+        app.button(key='m_apply_taxes').click().run()
+        app.segmented_control(key='m_mode').set_value('Live').run()
+        app.button(key='m_single_step').click().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key='m_tau_max').proto.default, 50)
+        self.assertEqual(app.number_input(key='m_direct_redistribution_fraction').proto.default, 25)
 
     def test_new_scenario_and_invalid_money_cap(self):
         app = self.app()
@@ -116,11 +153,9 @@ class MonetaryAppTests(unittest.TestCase):
 
     def test_fragment_only_refresh(self):
         source = (Path(__file__).resolve().parents[1] / 'app.py').read_text()
-        # Add a fragment-refresh trigger before st.stop in the monetary branch.
-        source = source.replace('    st.stop()', '\n    def refresh_monetary():\n        st.rerun("monetary_dashboard")\n'
-            '    st.button("Refresh monetary dashboard", key="m_test_refresh", on_click=refresh_monetary)\n    st.stop()')
+        source += '\n\ndef refresh_monetary():\n    st.rerun("monetary_dashboard")\n'
+        source += '\nst.button("Refresh monetary dashboard", key="m_test_refresh", on_click=refresh_monetary)\n'
         app = AppTest.from_string(source, default_timeout=40).run()
-        app.segmented_control(key='economic_model').set_value('Monetary economy').run()
         charts = len(app.get('vega_lite_chart'))
         app.button(key='m_test_refresh').click().run()
         self.assertFalse(app.exception)

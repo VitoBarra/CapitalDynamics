@@ -1,8 +1,8 @@
 # Monetary economy: accounting and assumptions
 
-Choose **Monetary economy** in the sidebar. This is a separate, experimental
-model, not an automatic conversion of legacy wealth balances. Switching models
-preserves both scenarios and pauses live playback. Load a comparison preset or
+The app opens directly into this experimental monetary model. The legacy
+dashboard is retired; legacy wealth balances are not automatically converted.
+Existing monetary sessions retain their state. Load a comparison preset or
 create a fresh scenario to explore alternatives.
 
 ## Starting accounts
@@ -147,6 +147,44 @@ monetary-policy reaction function, fitted inflation equation or forecast claim.
 Presets cover no credit/printing, government bonds, individual credit, a fixed
 broad ceiling, expandable credit, and monetary financing. They start fresh
 with seed 42; subsequent interventions are recorded by effective year.
+
+## Dashboard and settings
+
+Playback provides **Start** before the
+first year, **Pause** while running, and **Resume** afterwards. Single-year
+advancement is available while paused. The two main actions align side by
+side on desktop and stack on narrow screens.
+
+Settings buttons open compact, borderless forms with paired fields. All five
+budget percentages are edited together in one short grid; details of spent
+and unused amounts are collapsed below the allocation bars. Major sections have
+bordered containers, while settings forms stay borderless. Native widget defaults contain the active values
+so opening settings after live refreshes does not reset the displayed rates
+or allocations to their minima.
+
+New monetary scenarios default to **0% minimum and 60% maximum net wealth
+tax**, with progressivity 2. Existing scenarios, including their original tax
+rates and recorded history, are retained. Loading a comparison preset creates
+a fresh scenario using the new defaults.
+
+The sidebar's **Display** tab controls percentile groups, individual wealth
+visibility/log scale, and age bins/units. Individual wealth and percentile
+shares reuse the legacy viridis colors. Negative net wealth is shown as signed
+percentile totals, never clipped into a pie. The dashboard includes net wealth
+Gini history, the active tax curve, actual applied tax rates, healthcare patient
+choices and mortality trends. New observations start on the next year for
+existing sessions; unavailable historical readings remain gaps rather than
+invented zeros. Population, percentile, contract and account data remain
+available in detailed tables and downloads. The annual finance ledger records
+opening treasury money, taxes, borrowing, issuance, estates, policy/debt-service
+payments, closing money and reconciliation error, with a separate CSV download.
+
+Production reporting also tracks failed private investments, capital added and
+capital shortfall relative to full investment efficiency. A failure counts only
+when goods were actually purchased. Shortfall is forgone new capital, not lost
+money or destruction of existing household assets. Real household net wealth
+and productive capacity share a trend chart, but capacity is not a wealth cap:
+there is no dashed ceiling or legacy logistic wealth-growth/random-loss process.
 
 Tests check matching assets/liabilities, money creation/destruction, sector
 consolidation, government reconciliation, defaults, estate settlement, caps,

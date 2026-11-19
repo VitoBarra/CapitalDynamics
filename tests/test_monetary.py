@@ -3,10 +3,71 @@ import math
 import unittest
 
 from monetary import (BANK, GOV, PRODUCER, COMPARISON_NAMES, MonetaryConfig, MonetarySimulation,
-                      comparison_config)
+                      comparison_config, restore_monetary_simulation)
+from types import SimpleNamespace
 
 
 class MonetaryTests(unittest.TestCase):
+    def test_investment_observations_measure_capital_not_destroyed_money(self):
+        sim = self.economy(investment_risk=1, failed_investment_loss=.5)
+        sim.goods_remaining = 100
+        money = sim.broad_money
+        assets = sum(p.assets for p in sim.population)
+        expected = 3 * sim.config.init_wealth * sim.config.private_investment_fraction * sim.config.base_eff
+        sim.invest()
+        self.assertEqual(sim.flows['Failed private investments'], 3)
+        self.assertAlmostEqual(sim.flows['Private capital added'], expected / 2)
+        self.assertAlmostEqual(sim.flows['Private capital shortfall'], expected / 2)
+        self.assertAlmostEqual(sum(p.assets for p in sim.population) - assets, expected / 2)
+        self.assertAlmostEqual(sim.broad_money, money)
+        sim.reset_flows()
+        sim.goods_remaining = 0
+        sim.invest()
+        self.assertEqual(sim.flows['Failed private investments'], 0)
+        self.assertEqual(sim.flows['Private capital shortfall'], 0)
+
+    def test_annual_finance_ledger_reconciles_and_includes_year_zero(self):
+        sim = self.economy(monetary_financing=True, issuance_per_step=2)
+        self.assertEqual(sim.history[0]['Opening government money'], 0)
+        self.assertEqual(sim.history[0]['Government balance error'], 0)
+        for _ in range(5):
+            opening = sim.accounts[GOV]
+            sim.advance()
+            row = sim.history[-1]
+            self.assertEqual(row['Opening government money'], opening)
+            self.assertAlmostEqual(row['Total government spending'], sum(sim.spent.values()))
+            self.assertAlmostEqual(row['Government money'], opening + row['Tax revenue'] + row['Borrowing proceeds']
+                                   + row['Money issued'] + row['Estate revenue'] - row['Total government spending'])
+            self.assert_balanced(sim)
+
+    def test_new_tax_defaults_and_existing_session_rates(self):
+        self.assertEqual(MonetaryConfig().tau_base, 0)
+        self.assertEqual(MonetaryConfig().tau_max, .6)
+        previous = self.economy(tau_base=.005, tau_max=.04)
+        previous.advance(2)
+        old = SimpleNamespace(**previous.__dict__)
+        restored = restore_monetary_simulation(old)
+        self.assertIs(restored.history, previous.history)
+        self.assertIs(restored.rng, previous.rng)
+        self.assertIs(restored.population, previous.population)
+        self.assertEqual(restored.config.tau_base, .005)
+        self.assertEqual(restored.config.tau_max, .04)
+        self.assertEqual(restored.step_count, 2)
+        restored.advance()
+        self.assertEqual(restored.step_count, 3)
+
+    def test_tax_and_health_observations_are_recorded_without_changing_accounts(self):
+        sim = self.economy(monetary_financing=True, issuance_per_step=2)
+        sim.advance()
+        last = sim.history[-1]
+        self.assertEqual(last['Public healthcare users'] + last['Private healthcare users'], 3)
+        self.assertEqual(last['Observed mortality'], 0)
+        self.assertEqual(last['Minimum applied tax rate'], 0)
+        self.assertIn('UBI per person', last)
+        self.assertIn('Pension eligible', last)
+        self.assertAlmostEqual(last['Government balance error'], 0)
+        self.assertAlmostEqual(last['Money balance error'], 0)
+
     def economy(self, **changes):
         config = MonetaryConfig(pop_size=3, birth_prob_max=0, death_base_prob=0, aging_risk_rate=0,
                                 healthcare_choice_mode='Public only')

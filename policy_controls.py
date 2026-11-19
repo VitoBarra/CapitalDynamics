@@ -2,6 +2,7 @@
 from typing import Any
 import streamlit as st
 from budget import LEGACY_FIELDS, POLICIES
+from ui_components import policy_fields, sync_widget_value, widget_default
 
 POLICY_FIELDS: dict[str, list[tuple[Any, ...]]] = {'private_investments': [('gain_prob', 'Private opportunity event probability', 0.0, 1.0, 0.05),
                          ('gain_fraction',
@@ -162,12 +163,12 @@ def sync_policy_controls():
     config = current_simulation().config
     for specs in POLICY_FIELDS.values():
         for spec in specs:
-            st.session_state[f"config_{spec[0]}"] = getattr(config, spec[0])
-    st.session_state.config_healthcare_choice_mode = config.healthcare_choice_mode
+            sync_widget_value(f"config_{spec[0]}", getattr(config, spec[0]))
+    sync_widget_value("config_healthcare_choice_mode", config.healthcare_choice_mode)
     st.session_state.policy_notices = {}
     st.session_state.budget_notice = None
     for name in LEGACY_FIELDS:
-        st.session_state[f"budget_percent_{name}"] = float(getattr(config, name) * 100)
+        sync_widget_value(f"budget_percent_{name}", float(getattr(config, name) * 100))
 
 
 def apply_policy(group):
@@ -229,16 +230,16 @@ COMPACT_LABELS = {
 
 def policy_controls(group, title):
     config = current_simulation().config
-    with st.expander(title, icon=":material/tune:", key=f"policy_menu_{group}"):
-        if group == "ubi" and config.budget_mode == "Total budget":
-            st.caption(f"UBI allocation: {config.direct_redistribution_fraction:.0%} of the total policy budget. "
-                       "Edit all allocation percentages together under Government budget and taxes.")
-            return
+    if group == "ubi" and config.budget_mode == "Total budget":
+        st.caption(f"UBI: {config.direct_redistribution_fraction:.0%} of the common budget. Edit percentages in Budget allocation settings.")
+        return
+    with st.popover(title, icon=":material/tune:", key=f"policy_menu_{group}"):
         st.caption("Adjust the settings, then apply this policy. Changes take effect next step and preserve the current economy.")
         with st.form(f"policy_{group}", border=False, enter_to_submit=False):
             if group == "private_healthcare":
-                st.session_state.setdefault("config_healthcare_choice_mode", config.healthcare_choice_mode)
                 st.selectbox("Care choice", ["Adaptive", "Public only", "Private if affordable"],
+                             index=widget_default("config_healthcare_choice_mode",
+                                 ["Adaptive", "Public only", "Private if affordable"].index(config.healthcare_choice_mode), kind="selection"),
                              key="config_healthcare_choice_mode")
             specs = [spec for spec in POLICY_FIELDS[group]
                      if config.budget_mode != "Total budget" or spec[0] not in LEGACY_FIELDS]
@@ -246,16 +247,7 @@ def policy_controls(group, title):
                 if config.budget_mode == "Total budget" and any(spec[0] == name for spec in POLICY_FIELDS[group]):
                     st.caption(f"{policy} allocation: {getattr(config, name):.0%} of the total policy budget. "
                                "Edit all percentages together under Government budget and taxes.")
-            for index in range(0, len(specs), 2):
-                columns = st.columns(2, gap="medium", vertical_alignment="bottom")
-                for column, spec in zip(columns, specs[index:index + 2]):
-                    name, label, minimum, maximum, step, *help_text = spec
-                    key = f"config_{name}"
-                    value = getattr(config, name)
-                    st.session_state.setdefault(key, float(value) if isinstance(minimum, float) else int(value))
-                    with column:
-                        st.number_input(COMPACT_LABELS.get(label, label), min_value=minimum, max_value=maximum,
-                                        step=step, help=f"{label}. {help_text[0]}" if help_text else label, key=key)
+            policy_fields(specs, config, prefix="config_", labels=COMPACT_LABELS)
             st.form_submit_button("Apply policy", icon=":material/check:", key=f"apply_{group}", type="primary", width="stretch",
                                   on_click=apply_policy, args=(group,))
         notice = st.session_state.get("policy_notices", {}).get(group)
@@ -272,23 +264,20 @@ def apply_budget():
         st.session_state.budget_notice = (False, str(error))
     else:
         st.session_state.budget_notice = (True, "Budget allocations apply from the next step.")
-        for name, value in changes.items():
-            st.session_state[f"config_{name}"] = value
 
 
 def budget_controls():
     config = current_simulation().config
-    with st.expander("Budget allocation settings", icon=":material/tune:"):
-        st.caption("All percentages use opening government funds plus taxes collected this step. "
-                   "Estates received after spending are available next step. Unused allocations remain in the budget.")
+    with st.popover("Budget allocation settings", icon=":material/tune:", key="budget_menu"):
+        st.caption("Each % uses the same total budget. Unused funds stay with government; allocations must total at most 100%.")
         if config.budget_mode != "Total budget":
             st.warning("This scenario still uses sequential legacy spending. Applying this form explicitly switches "
                        "future steps to total-budget percentages; existing history is unchanged.")
-        with st.form("budget_allocation", enter_to_submit=False):
-            for name, policy in zip(LEGACY_FIELDS, POLICIES):
-                key = f"budget_percent_{name}"
-                st.session_state.setdefault(key, float(getattr(config, name) * 100))
-                st.number_input(f"{policy} allocation (% of total budget)", 0.0, 100.0, step=1.0, key=key)
+        with st.form("budget_allocation", border=False, enter_to_submit=False):
+            specs = [(name, f"{policy} allocation (% of total budget)", 0.0, 100.0, 1.0)
+                     for name, policy in zip(LEGACY_FIELDS, POLICIES)]
+            policy_fields(specs, config, prefix="budget_percent_", percentages=LEGACY_FIELDS,
+                          labels={name: f"{policy} (%)" for name, policy in zip(LEGACY_FIELDS, POLICIES)})
             st.form_submit_button("Apply budget allocation", key="apply_budget", on_click=apply_budget, width="stretch")
         notice = st.session_state.get("budget_notice")
         if notice:
