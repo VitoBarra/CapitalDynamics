@@ -14,6 +14,23 @@ This creates a `.venv` virtual environment, installs dependencies, and starts th
 
 Use `make install` to install dependencies without launching the app, `make test` to run the model and interface checks, or `make help` to list commands.
 
+### Local launch settings
+
+Run `make init-env` to create a Git-ignored `.env.local` prefilled with all available launch settings and their defaults. Existing settings are never overwritten. The Makefile reads this file automatically when present; it is optional.
+
+Add any settings you want to override, using Makefile-style assignments (without shell quotes):
+
+```makefile
+PORT=8502
+HOST=127.0.0.1
+HEADLESS=true
+STREAMLIT_ARGS=--server.runOnSave=true
+```
+
+Available settings are `PORT` (default `8501`), `HOST` (`localhost`), `HEADLESS` (`false`), `APP` (`app.py`), `PYTHON` (`python3`), `VENV` (`.venv`), and `STREAMLIT_ARGS` (empty). Variables are also exported to launched processes, so additional Streamlit settings such as `STREAMLIT_BROWSER_GATHER_USAGE_STATS=false` can be added. Explicit launch flags take precedence over equivalent Streamlit environment variables.
+
+Command-line overrides take priority over `.env.local`, for example `make run PORT=8503`. Plain `make` still launches the app.
+
 ## Run a scenario
 
 The simulator starts with 300 people, one wealth unit each, and capacity for 1,000 wealth units. Defaults favor moderate growth, a functioning public budget and slower demographic change. They are exploratory model settings, not estimates for a real economy. Existing sessions keep their parameters; the sidebar's **Load default scenario** button starts a fresh run with the revised defaults.
