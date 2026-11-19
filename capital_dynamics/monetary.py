@@ -1036,12 +1036,16 @@ class MonetarySimulation:
 
     def record(self):
         wealth = [self.net_wealth(p) for p in self.population]
+        output_value = self.output * getattr(self, "trade_price", self.price)
         # Conventional Gini is not bounded with negative net wealth; report it
         # only for non-negative distributions rather than silently clipping debt.
         gini = gini_coefficient(np.array(wealth)) if all(x >= 0 for x in wealth) else None
         self.history.append({"Step": self.step_count, "Population": len(self.population), "Net wealth": sum(wealth),
             "Real net wealth": sum(wealth) / self.price, "Productive capacity": self.capacity, "Output": self.output,
             "Price level": self.price, "Inflation": self.inflation, "Base money": self.reserves, "Broad money": self.broad_money,
+            "Desired goods spending": self.nominal_demand, "Output at trade prices": output_value,
+            "Goods demand coverage": self.nominal_demand / output_value if output_value > EPS else None,
+            "Unsold goods": self.goods_remaining,
             "Government money": self.accounts[GOV], "Government debt": self.government_debt,
             "Government market debt": self.government_market_debt, "Government arrears": self.government_arrears,
             "Sovereign spread": self.sovereign_spread(), "New bond yield": self.config.bond_rate + self.sovereign_spread(),

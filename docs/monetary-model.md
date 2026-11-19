@@ -132,6 +132,43 @@ years (default three). Each default adds an 8-percentage-point reputation
 penalty by default, recovering by 10% annually; it persists after exclusion.
 Default events and nominal debt reconciliations are exported and displayed.
 
+## Why the baseline tends to deflate
+
+The price rule is `inflation_response × (desired goods spending / output value − 1)`,
+bounded at −10% / +25%, with an absolute price floor. Output value uses the
+opening transaction price, not the closing price. Desired goods spending includes
+consumption and investment before rationing; taxes, transfers, bond purchases
+and healthcare funding are not goods demand.
+
+With the default seed/settings, a 30-year diagnostic run produced negative
+inflation in all 30 years: approximately −6.50% in year 1, −5.32% in year 10
+and −3.32% in year 30. First-year demand covered about 35% of output value,
+leaving about 79.24 goods unsold. Broad money stayed at €200: deflation did
+not require money destruction.
+
+This is a structural limitation, not a reversed inflation sign:
+
+- Production always uses available capital/workers without responding to
+  expected sales; unsold goods expire rather than reducing next year's output.
+- Residents consume only part of liquid money. Producers retain profits and
+  treasury balances are only partly spent; deposits held there do not directly
+  buy household consumption goods.
+- Credit and fiat financing are disabled by default. Investment can increase
+  productive capacity without a matching increase in nominal goods demand.
+- There is no wage bargaining, cost-push pricing, inflation expectation or
+  central-bank inflation target. The goods-price index is not a calibrated CPI.
+
+The dashboard and exports report desired goods spending, output at trade
+prices, demand coverage and unsold goods to expose this mechanism. Coverage
+below 100% pushes prices down; above 100% pushes them up. Coverage is undefined
+with zero output. Tests cover deflation, stable prices and positive inflation.
+Increasing spending or reducing supply can produce inflation, but printing
+money alone does not guarantee it: the new deposits must reach goods demand.
+No positive inflation floor or silent parameter retuning is applied.
+
+A demand-responsive production/inventory and wage-setting model would be a
+separate economic extension, not an accounting correction.
+
 ## Banking
 
 Investment loans require **repayment income as well as collateral**. Annual

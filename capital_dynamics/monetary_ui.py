@@ -531,9 +531,18 @@ def monetary_workspace():
             monetary_trend(trends, ["Base money", "Broad money"], "Money supplies")
             monetary_trend(trends, ["Inflation"], "Inflation", percentage=True)
             monetary_trend(trends, ["Price level"], "Price level (starting year = 1)")
+            a, b = st.columns(2)
+            a.metric("Goods demand coverage", observed_value(last["Goods demand coverage"], ".1%"),
+                     border=True, help=METRIC_HELP["Goods demand coverage"])
+            b.metric("Unsold goods", f"{last['Unsold goods']:,.2f}", border=True, help=METRIC_HELP["Unsold goods"])
+            monetary_trend(trends, ["Desired goods spending", "Output at trade prices"],
+                           "Goods spending versus supply value (before price adjustment)")
             st.caption("Base money = bank reserves. Broad money = all non-bank deposits, including treasury, goods producers and healthcare providers. "
                        "A base-money cap does not cap bank deposits. A broad-money cap also constrains bank credit and distributions. "
-                       "Prices adjust to desired goods spending relative to output; annual changes are bounded at −10% / +25% for numerical stability.")
+                        "Prices adjust to desired goods spending relative to output; annual changes are bounded at −10% / +25% for numerical stability.")
+            st.caption("Demand coverage below 100% causes deflation in this model. Production follows available capacity and workers, "
+                       "not expected sales; unsold goods expire. Saving, retained profits and treasury balances can keep demand below supply "
+                       "even when broad money is unchanged. This is a simplified goods-price index, not a calibrated consumer price index.")
         with slots["age"].container():
             age_distribution(people, display["age_bin"], display["age_unit"])
             monetary_trend(trends, ["Population", "Deaths"], "Population and deaths")

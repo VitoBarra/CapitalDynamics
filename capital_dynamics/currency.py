@@ -24,13 +24,14 @@ MONEY_COLUMNS = {
     "Refinanced principal", "Sovereign debt written off", "Sovereign market losses", "Government debt balance error",
     "Bank bond valuation change", "Bond face value", "Bond interest arrears", "Market value",
     "Principal cancelled", "Interest cancelled", "Creditor market loss", "Bank principal loss",
+    "Desired goods spending", "Output at trade prices",
 }
 for _policy in ("UBI", "Pensions", "Healthcare", "Public investment", "Debt service"):
     MONEY_COLUMNS.update((f"{_policy} spent", f"{_policy} allocated"))
 
 REAL_MONEY_COLUMNS = {"Real net wealth", "Median real disposable income"}
 CAPITAL_COLUMNS = {"Productive capacity", "Real productive assets", "Private capital added", "Private capital shortfall"}
-GOODS_COLUMNS = {"Output", "Real consumption", "Real investment", "Real consumption per person"}
+GOODS_COLUMNS = {"Output", "Real consumption", "Real investment", "Real consumption per person", "Unsold goods"}
 
 
 def euro(value, decimals=2):
