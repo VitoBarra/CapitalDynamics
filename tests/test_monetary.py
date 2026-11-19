@@ -3,8 +3,7 @@ import math
 import unittest
 
 from capital_dynamics.monetary import (BANK, GOV, PRODUCER, COMPARISON_NAMES, MonetaryConfig, MonetarySimulation,
-                      comparison_config, restore_monetary_simulation)
-from types import SimpleNamespace
+                      comparison_config)
 
 
 class MonetaryTests(unittest.TestCase):
@@ -13,7 +12,7 @@ class MonetaryTests(unittest.TestCase):
         sim.goods_remaining = 100
         money = sim.broad_money
         assets = sum(p.assets for p in sim.population)
-        expected = 3 * sim.config.init_wealth * sim.config.private_investment_fraction * sim.config.base_eff
+        expected = 3 * sim.config.initial_money_per_person * sim.config.private_investment_fraction * sim.config.base_eff
         sim.invest()
         self.assertEqual(sim.flows['Failed private investments'], 3)
         self.assertAlmostEqual(sim.flows['Private capital added'], expected / 2)
@@ -40,21 +39,14 @@ class MonetaryTests(unittest.TestCase):
                                    + row['Money issued'] + row['Estate revenue'] - row['Total government spending'])
             self.assert_balanced(sim)
 
-    def test_new_tax_defaults_and_existing_session_rates(self):
+    def test_tax_defaults_and_applied_rates(self):
         self.assertEqual(MonetaryConfig().tau_base, 0)
         self.assertEqual(MonetaryConfig().tau_max, .6)
-        previous = self.economy(tau_base=.005, tau_max=.04)
-        previous.advance(2)
-        old = SimpleNamespace(**previous.__dict__)
-        restored = restore_monetary_simulation(old)
-        self.assertIs(restored.history, previous.history)
-        self.assertIs(restored.rng, previous.rng)
-        self.assertIs(restored.population, previous.population)
-        self.assertEqual(restored.config.tau_base, .005)
-        self.assertEqual(restored.config.tau_max, .04)
-        self.assertEqual(restored.step_count, 2)
-        restored.advance()
-        self.assertEqual(restored.step_count, 3)
+        sim = self.economy(tau_base=.005, tau_max=.04)
+        sim.advance(2)
+        self.assertEqual(sim.config.tau_base, .005)
+        self.assertEqual(sim.config.tau_max, .04)
+        self.assertEqual(sim.step_count, 2)
 
     def test_tax_and_health_observations_are_recorded_without_changing_accounts(self):
         sim = self.economy(monetary_financing=True, issuance_per_step=2)
@@ -74,6 +66,10 @@ class MonetaryTests(unittest.TestCase):
         sim = MonetarySimulation(replace(config, **changes))
         for p in sim.population:
             p.age = 30
+            # A documented, already observed repayment income for direct
+            # origination tests; collateral alone must no longer suffice.
+            p.last_repayment_income = 100
+            p.income_observed = True
         return sim
 
     def assert_balanced(self, sim):
@@ -125,7 +121,8 @@ class MonetaryTests(unittest.TestCase):
         self.assert_balanced(sim)
 
     def test_default_writes_down_bank_not_other_deposits(self):
-        sim = self.economy(lending_enabled=True, default_after=1, policy_rate=0, loan_spread=0)
+        sim = self.economy(lending_enabled=True, default_after=1, policy_rate=0, loan_spread=0,
+                           collateral_recovery_haircut=1)
         person = sim.population[0]
         sim.originate_loan(person, 2)
         sim.transfer(person.account, PRODUCER, sim.accounts[person.account], 'Spend all money')
@@ -195,7 +192,7 @@ class MonetaryTests(unittest.TestCase):
         self.assert_balanced(sim)
 
     def test_printing_can_raise_prices_without_increasing_output(self):
-        settings = dict(direct_redistribution_fraction=1, pension_budget_fraction=0,
+        settings = dict(ubi_budget_fraction=1, pension_budget_fraction=0,
             healthcare_spending_fraction=0, investment_budget_fraction=0, debt_service_fraction=0,
             private_investment_fraction=0, delta=0)
         baseline = self.economy(**settings)
@@ -208,7 +205,8 @@ class MonetaryTests(unittest.TestCase):
         self.assert_balanced(printing)
 
     def test_insolvency_freezes_new_credit(self):
-        sim = self.economy(lending_enabled=True, policy_rate=0, loan_spread=0, default_after=1)
+        sim = self.economy(lending_enabled=True, policy_rate=0, loan_spread=0, default_after=1,
+                           collateral_recovery_haircut=1)
         person, other, _ = sim.population
         sim.originate_loan(person, 20)
         sim.transfer(person.account, PRODUCER, sim.accounts[person.account], 'Unrecoverable expenditure')
@@ -241,8 +239,8 @@ class MonetaryTests(unittest.TestCase):
         sim.settle_estates({parent.person_id})
         self.assertFalse(sim.loans)
         self.assertNotIn(parent.account, sim.accounts)
-        self.assertEqual(sim.capacity, before)
-        self.assertGreater(child.assets, sim.config.logistic_capacity / 3)
+        self.assertAlmostEqual(sim.capacity, before)
+        self.assertGreater(child.assets, sim.config.initial_capacity / 3)
         self.assert_balanced(sim)
 
     def test_illiquid_estate_default_and_simultaneous_deaths(self):

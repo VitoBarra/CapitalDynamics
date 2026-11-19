@@ -25,23 +25,113 @@ class MonetaryAppTests(unittest.TestCase):
         # Defaults must be in the widget proto, not only session-state overrides:
         # otherwise closed settings can remount at their minima after live ticks.
         self.assertEqual(app.number_input(key='m_tau_max').proto.default, 60)
-        self.assertEqual(app.number_input(key='m_direct_redistribution_fraction').proto.default, 25)
+        self.assertEqual(app.number_input(key='m_ubi_budget_fraction').proto.default, 25)
         self.assertEqual(app.number_input(key='m_initial_producer').proto.default, 100)
+
+    def assert_explanatory_help(self, app):
+        for kind in ('number_input', 'selectbox', 'slider', 'select_slider', 'toggle',
+                     'segmented_control', 'button', 'download_button', 'metric'):
+            for element in app.get(kind):
+                with self.subTest(kind=kind, label=element.label):
+                    help_text = element.proto.help.strip()
+                    self.assertTrue(help_text)
+                    self.assertNotEqual(help_text, element.label)
+        for element in app.get('popover'):
+            self.assertTrue(element.proto.popover.help.strip())
+
+    def test_tooltips_cover_batch_and_live_controls_metrics_and_downloads(self):
+        app = self.app()
+        self.assert_explanatory_help(app)
+        app.segmented_control(key='m_mode').set_value('Live').run()
+        self.assertFalse(app.exception)
+        self.assert_explanatory_help(app)
+        app.button(key='m_toggle_live').click().run()
+        self.assertFalse(app.exception)
+        self.assert_explanatory_help(app)
+        app.button(key='m_toggle_live').click().run()
+        self.assertFalse(app.exception)
+        self.assert_explanatory_help(app)
+
+    def test_every_monetary_policy_has_specific_help(self):
+        from capital_dynamics.help_text import POLICY_HELP
+        from capital_dynamics.monetary_ui import SPECS
+
+        app = self.app()
+        for specs in SPECS.values():
+            for name, label, *_ in specs:
+                with self.subTest(policy=name):
+                    self.assertIn(name, POLICY_HELP)
+                    self.assertNotEqual(POLICY_HELP[name], label)
+                    element = next(
+                        widget for kind in ('number_input', 'selectbox', 'toggle')
+                        for widget in app.get(kind) if widget.key == f'm_{name}'
+                    )
+                    self.assertEqual(element.proto.help, POLICY_HELP[name])
+        self.assertIn('not a full save-state', app.get('download_button')[-1].proto.help)
+        self.assertIn('Replace the current economy', app.button(key='m_new_scenario').proto.help)
+
+    def test_euro_amounts_and_physical_units_are_explicit(self):
+        from capital_dynamics.monetary_ui import table_columns
+        import pandas as pd
+
+        app = self.app()
+        money_metrics = {
+            'Nominal net wealth', 'Real net wealth', 'Government money', 'Government debt',
+            'Debt service shortfall', 'Tax revenue last year', 'Government cash outflows last year',
+            'UBI paid', 'Pensions paid', 'Unfunded pension entitlement', 'Public healthcare paid',
+            'Private premiums paid', 'Healthcare sector money', 'Bank equity',
+            'Outstanding household loans', 'Loan defaults this year', 'Base money', 'Broad money',
+        }
+        for metric in app.metric:
+            if metric.label in money_metrics:
+                self.assertTrue(metric.value.startswith('€'), metric.label)
+        for key in ('m_initial_money', 'm_initial_producer', 'm_initial_bank',
+                    'm_borrowing_target', 'm_debt_ceiling', 'm_issuance_per_step', 'm_money_cap'):
+            self.assertIn('€', app.number_input(key=key).label)
+        columns = table_columns(pd.DataFrame(columns=['Money', 'Real net wealth', 'Productive capacity', 'Age']))
+        self.assertEqual(columns['Money']['label'], 'Money (EUR)')
+        self.assertEqual(columns['Real net wealth']['label'], 'Real net wealth (EUR, year-0 prices)')
+        self.assertEqual(columns['Productive capacity']['label'], 'Productive capacity (capital units)')
+        self.assertTrue(any('euro' in caption.value.lower() for caption in app.caption))
+
+    def test_living_standards_and_credit_risk_controls(self):
+        from capital_dynamics.currency import euro
+
+        app = self.app()
+        self.assertIn('Living standards and income', [h.value for h in app.header])
+        metric = lambda label: next(item for item in app.metric if item.label == label)
+        self.assertEqual(metric('Median disposable income').value, 'Not recorded')
+        self.assertEqual(metric('Pension replacement ratio').value, 'Not recorded')
+        self.assertEqual(app.number_input(key='m_debt_service_limit').value, 35)
+        self.assertEqual(app.number_input(key='m_income_stress_fraction').value, 20)
+        app.number_input(key='m_debt_service_limit').set_value(25.0)
+        app.number_input(key='m_collateral_recovery_haircut').set_value(40.0)
+        app.button(key='m_apply_banking').click().run()
+        sim = app.session_state.monetary_simulation
+        self.assertEqual(sim.config.debt_service_limit, .25)
+        self.assertEqual(sim.config.collateral_recovery_haircut, .4)
+        app.number_input(key='m_years').set_value(1)
+        app.button(key='m_advance').click().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(metric('Median disposable income').value, euro(sim.history[-1]['Median disposable income']))
+        self.assertEqual(metric('Prudential bank equity').value, euro(sim.prudential_equity))
+        self.assertTrue(any('not the official EU poverty rate' in caption.value for caption in app.caption))
+        self.assertIn('Official data references and calibration status', [item.label for item in app.expander])
 
     def test_budget_is_atomic_and_percentage_inputs_are_not_fractions(self):
         app = self.app()
         sim = app.session_state.monetary_simulation
         before = sim.config
-        app.number_input(key='m_direct_redistribution_fraction').set_value(90.0)
+        app.number_input(key='m_ubi_budget_fraction').set_value(90.0)
         app.button(key='m_apply_allocation').click().run()
         self.assertEqual(sim.config, before)
         self.assertTrue(any('100%' in error.value for error in app.error))
-        app.number_input(key='m_direct_redistribution_fraction').set_value(20.0)
+        app.number_input(key='m_ubi_budget_fraction').set_value(20.0)
         app.number_input(key='m_pension_budget_fraction').set_value(10.0)
         app.number_input(key='m_healthcare_spending_fraction').set_value(30.0)
         app.button(key='m_apply_allocation').click().run()
         self.assertFalse(app.exception)
-        self.assertEqual(sim.config.direct_redistribution_fraction, .2)
+        self.assertEqual(sim.config.ubi_budget_fraction, .2)
         self.assertEqual(sim.config.healthcare_spending_fraction, .3)
         self.assertEqual(sim.step_count, 0)
         app.number_input(key='m_years').set_value(1)
@@ -51,6 +141,10 @@ class MonetaryAppTests(unittest.TestCase):
     def test_banking_and_printing_controls_preserve_state(self):
         app = self.app()
         sim = app.session_state.monetary_simulation
+        # Make wages available for repayment; default wealth taxes can absorb
+        # current wages and legitimately prevent new borrowing.
+        app.number_input(key='m_tau_max').set_value(0.0)
+        app.button(key='m_apply_taxes').click().run()
         app.toggle(key='m_lending_enabled').set_value(True)
         app.number_input(key='m_loan_spread').set_value(4.0)
         app.button(key='m_apply_banking').click().run()
@@ -124,14 +218,14 @@ class MonetaryAppTests(unittest.TestCase):
         for form in app.get('form'):
             self.assertFalse(form.proto.form.border)
         self.assertTrue(any(n.key == 'm_settings_allocation' for n in app.get('popover')))
-        self.assertEqual(app.number_input(key='m_direct_redistribution_fraction').label, 'UBI (%)')
+        self.assertEqual(app.number_input(key='m_ubi_budget_fraction').label, 'UBI (%)')
         app.number_input(key='m_tau_max').set_value(50.0)
         app.button(key='m_apply_taxes').click().run()
         app.segmented_control(key='m_mode').set_value('Live').run()
         app.button(key='m_single_step').click().run()
         self.assertFalse(app.exception)
         self.assertEqual(app.number_input(key='m_tau_max').proto.default, 50)
-        self.assertEqual(app.number_input(key='m_direct_redistribution_fraction').proto.default, 25)
+        self.assertEqual(app.number_input(key='m_ubi_budget_fraction').proto.default, 25)
 
     def test_new_scenario_and_invalid_money_cap(self):
         app = self.app()
@@ -167,6 +261,8 @@ class MonetaryAppTests(unittest.TestCase):
         sim.update_policy(lending_enabled=True, loan_term=1, policy_rate=.05, loan_spread=0)
         person = sim.population[0]
         person.age = 30
+        person.last_repayment_income = 100
+        person.income_observed = True
         sim.originate_loan(person, 1)
         sim.step_count = 1
         sim.service_loans()

@@ -16,9 +16,9 @@ class AppTests(unittest.TestCase):
         self.assertNotIn('economic_model', [w.key for w in app.segmented_control])
         self.assertNotIn('simulation', app.session_state)
         self.assertEqual(app.session_state.monetary_simulation.step_count, 0)
-        self.assertEqual(len(app.header), 9)
+        self.assertEqual(len(app.header), 10)
 
-    def test_reporting_and_downloads_cover_legacy_categories(self):
+    def test_reporting_and_downloads_cover_dashboard_sections(self):
         app = self.app()
         titles = [s.value for s in app.subheader]
         for title in ('Net wealth of each individual', 'Wealth by population percentile',
@@ -77,16 +77,15 @@ class AppTests(unittest.TestCase):
         self.assertIs(sim, app.session_state.monetary_simulation)
         self.assertEqual(sim.step_count, 2)
 
-    def test_old_monetary_history_is_not_backfilled(self):
+    def test_current_history_has_complete_reporting(self):
         app = self.app()
         sim = app.session_state.monetary_simulation
         missing = ('Opening government money', 'Total government spending', 'Government balance error',
                    'Failed private investments', 'Private capital added', 'Private capital shortfall')
         for key in missing:
-            sim.history[0].pop(key)
+            self.assertIn(key, sim.history[0])
         app.run()
         self.assertFalse(app.exception)
-        self.assertTrue(all(key not in sim.history[0] for key in missing))
         app.number_input(key='m_years').set_value(1)
         app.button(key='m_advance').click().run()
         self.assertFalse(app.exception)
