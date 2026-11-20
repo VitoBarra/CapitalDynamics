@@ -12,9 +12,9 @@ from capital_dynamics.economics import relative_wealth, tax_rates_at_relative_we
 PALETTE = ["#2563EB", "#0D9488", "#D97706", "#7C3AED", "#E11D48", "#64748B"]
 SERIES_COLORS = {**dict(zip(POLICIES, COLORS)),
     "UBI spent": COLORS[0], "Pensions spent": COLORS[1], "Healthcare spent": COLORS[2],
-    "Public investment spent": COLORS[3], "Debt service spent": COLORS[4],
+    "Public investment spent": COLORS[3], "Education spent": COLORS[4], "Debt service spent": COLORS[5],
     "Net wealth": PALETTE[0], "Real net wealth": PALETTE[1], "Public": COLORS[2], "Private": COLORS[0],
-    "Unfunded": COLORS[4], "Loan defaults": COLORS[4], "Deaths": COLORS[4]}
+    "Unfunded": COLORS[5], "Loan defaults": COLORS[5], "Deaths": COLORS[5]}
 
 
 def series_scale(names):

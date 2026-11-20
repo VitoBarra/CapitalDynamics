@@ -11,6 +11,7 @@ class LivingStandardsTests(unittest.TestCase):
             sim.population, [30, 50, 65, 70], [10, 20, 5, 15], [1, 2, 0, 1], [1, 3, 0, 0], [4, 6, 2, 8]
         ):
             p.age, p.income_received, p.tax_paid, p.interest_paid, p.consumption_paid = age, income, tax, interest, consumption
+            p.consumption_units = consumption / 2
         sim.population[1].income = 20
         sim.population[2].pension_received = 5
         sim.population[3].pension_received = 15
@@ -45,7 +46,7 @@ class LivingStandardsTests(unittest.TestCase):
             p.age = 50
         self.assertIsNone(sim.history[0]["Median disposable income"])
         sim.advance(2)
-        earned = {"Wages", "UBI", "Pension", "Producer dividends", "Healthcare income",
+        earned = {"Firm wages", "Research wages", "Education salaries", "Energy income", "UBI", "Pension", "Firm dividends", "Healthcare income",
                   "Bond interest paid", "Bank distribution creates deposits against bank equity"}
         for p in sim.population:
             latest = [t for t in sim.transactions if t["Step"] == sim.step_count]

@@ -18,9 +18,13 @@ from capital_dynamics.dashboard_charts import trend_chart, wealth_distribution, 
 
 SPECS: dict[str, list[tuple[Any, ...]]] = {
     "production": [
-        ("productivity", "Output per worker", 0.0, 100.0, 0.1),
+        ("productivity", "Base output per worker", 0.0, 100.0, 0.1),
+        ("productivity_growth", "Annual productivity trend growth (%)", 0.0, 100.0, 0.1),
+        ("technology_breakthrough_probability", "Annual technology breakthrough chance (%)", 0.0, 100.0, 1.0),
+        ("technology_gain_min", "Minimum breakthrough productivity gain (%)", 0.0, 100.0, 0.5),
+        ("technology_gain_max", "Maximum breakthrough productivity gain (%)", 0.0, 100.0, 0.5),
         ("consumption_fraction", "Consumption propensity (%)", 0.0, 100.0, 1.0),
-        ("wage_fraction", "Wage funding fraction (%)", 0.0, 100.0, 1.0),
+        ("wage_fraction", "Base wage / base productivity (%)", 0.0, 100.0, 1.0),
         ("producer_dividend_fraction", "Producer profit distributed (%)", 0.0, 100.0, 1.0),
         ("private_investment_fraction", "Money invested by working adults (%)", 0.0, 100.0, 1.0),
         ("base_eff", "Capital units per investment unit", 0.0, 2.0, 0.05),
@@ -30,6 +34,55 @@ SPECS: dict[str, list[tuple[Any, ...]]] = {
     "taxes": [("tau_base", "Minimum net wealth tax (%)", 0.0, 100.0, 0.1),
               ("tau_max", "Maximum net wealth tax (%)", 0.0, 100.0, 0.1),
               ("tau_gamma", "Tax progressivity", 0.1, 20.0, 0.1)],
+    "education": [
+        ("teacher_salary", "Teacher annual salary (initial money multiple)", 0.01, 20.0, 0.05),
+        ("students_per_teacher", "Effective students per teacher", 1.0, 100.0, 1.0),
+        ("education_cost_per_student", "Annual resource target per learner (initial money multiple)", 0.01, 10.0, 0.01),
+        ("education_materials_fraction", "Provider cash offered for materials (%)", 0.0, 100.0, 1.0),
+        ("school_skill_gain", "School skill points per effective year", 0.0, 1.0, 0.01),
+        ("university_enrollment_fraction", "Eligible young adults choosing university (%)", 0.0, 100.0, 1.0),
+        ("university_duration", "University effective study years", 1, 10, 1),
+        ("university_skill_gain", "Skill points on university completion", 0.0, 2.0, 0.05),
+        ("retraining_participation", "Unemployed choosing adult training (%)", 0.0, 100.0, 1.0),
+        ("retraining_duration", "Adult training effective years", 1, 10, 1),
+        ("retraining_skill_gain", "Skill points on training completion", 0.0, 1.0, 0.05),
+        ("skill_depreciation", "Annual adult skill depreciation (%)", 0.0, 100.0, 0.1),
+        ("work_skill_gain", "Skill gain from a baseline working year", 0.0, 1.0, 0.01),
+        ("work_technology_learning", "Technology familiarity gap closed by work (%)", 0.0, 100.0, 1.0),
+        ("skill_ceiling", "Maximum personal skill index", 1.0, 10.0, 0.1),
+        ("skill_productivity_effect", "Worker productivity gain per extra skill point", 0.0, 2.0, 0.1),
+        ("skill_wage_premium", "Wage premium per extra skill point (%)", 0.0, 200.0, 1.0),
+        ("technology_skill_penalty", "Maximum productivity loss from technology mismatch (%)", 0.0, 100.0, 1.0)],
+    "energy": [
+        ("energy_supply", "Annual primary energy supply (energy units)", 0.0, 1000000.0, 1.0),
+        ("energy_supply_growth", "Annual energy supply growth (%)", 0.0, 100.0, 0.1),
+        ("energy_intensity", "Energy units required per new good", 0.0, 10.0, 0.05),
+        ("energy_base_price", "Base energy price (€/energy unit)", 0.01, 1000.0, 0.01),
+        ("energy_scarcity_response", "Energy price sensitivity to scarcity", 0.0, 10.0, 0.1),
+        ("energy_income_fraction", "Provider cash returned as household income (%)", 0.0, 100.0, 1.0),
+        ("energy_shock_probability", "Annual supply shock chance (%)", 0.0, 100.0, 1.0),
+        ("energy_shock_severity", "Energy supply lost during a shock (%)", 0.0, 100.0, 1.0),
+        ("energy_shock_duration", "Supply shock duration (years)", 1, 20, 1)],
+    "firms": [
+        ("initial_demand_fraction", "Startup expected demand / potential output (%)", 0.0, 100.0, 1.0),
+        ("demand_adaptation", "Expected demand adjustment per year (%)", 0.0, 100.0, 1.0),
+        ("inventory_target", "Target inventory / expected sales (%)", 0.0, 100.0, 1.0),
+        ("inventory_spoilage", "Annual inventory spoilage (%)", 0.0, 100.0, 1.0),
+        ("price_competition", "Buyer sensitivity to relative prices", 0.0, 10.0, 0.1),
+        ("firm_markup", "Target markup over unit labor cost (%)", 0.0, 100.0, 1.0),
+        ("wage_inflation_indexation", "Inflation passed into wage bargaining (%)", 0.0, 100.0, 1.0),
+        ("wage_productivity_share", "Productivity gains passed into wages (%)", 0.0, 100.0, 1.0),
+        ("wage_bargaining_strength", "Labor scarcity wage response (%)", 0.0, 100.0, 1.0),
+        ("target_unemployment", "Wage bargaining unemployment reference (%)", 0.0, 100.0, 1.0),
+        ("research_spending_fraction", "Post-payroll cash spent on research (%)", 0.0, 100.0, 0.5),
+        ("research_effectiveness", "Research intensity breakthrough sensitivity", 0.0, 20.0, 0.1),
+        ("technology_adoption_rate", "Annual technology gap closed (%)", 0.0, 100.0, 1.0),
+        ("research_adoption_effectiveness", "Research intensity adoption sensitivity", 0.0, 20.0, 0.1),
+        ("firm_entry_fraction", "Worker cash contributed to a new firm (%)", 0.0, 100.0, 0.5),
+        ("firm_failure_years", "Cash-distressed loss years before firm exit", 1, 20, 1),
+        ("business_lending", "Enable bank working-capital loans to firms"),
+        ("firm_credit_limit", "Business credit ceiling / past sales", 0.0, 5.0, 0.1),
+        ("firm_loan_term", "New business loan term (years)", 1, 20, 1)],
     "allocation": [(name, f"{policy} allocation (% of total budget)", 0.0, 100.0, 1.0)
                    for name, policy in zip(ALLOCATION_FIELDS, POLICIES)],
     "bonds": [("government_borrowing", "Enable government borrowing"),
@@ -112,7 +165,8 @@ def sync_monetary_initial_controls():
     sim = st.session_state.monetary_simulation
     for key, value in {"m_seed": sim.seed, "m_initial_population": sim.config.pop_size,
         "m_initial_money": float(sim.config.initial_money_per_person), "m_initial_capacity": float(sim.config.initial_capacity),
-        "m_initial_producer": float(sim.config.initial_producer_money), "m_initial_bank": float(sim.config.initial_bank_capital)}.items():
+        "m_initial_producer": float(sim.config.initial_producer_money), "m_initial_bank": float(sim.config.initial_bank_capital),
+        "m_initial_firms": sim.config.firm_count, "m_firm_dispersion": float(sim.config.firm_productivity_dispersion * 100)}.items():
         sync_widget_value(key, value)
 
 
@@ -185,6 +239,15 @@ def queue_sovereign_default():
 
 def cancel_sovereign_default():
     st.session_state.monetary_simulation.sovereign_default_pending = False
+
+
+def queue_energy_shock():
+    st.session_state.monetary_simulation.energy.shock_pending = True
+    st.session_state.monetary_running = False
+
+
+def cancel_energy_shock():
+    st.session_state.monetary_simulation.energy.shock_pending = False
 
 
 def sovereign_default_controls(sim):
@@ -263,12 +326,18 @@ def monetary_workspace():
                                         help="Starting deposits held by goods producers, separate from household money. These funds help pay wages before sales revenue arrives.")
             bank = st.number_input("Initial bank capital / reserves (€)", 0.0, 1000000000.0,
                                     value=widget_default("m_initial_bank", float(sim.config.initial_bank_capital)), key="m_initial_bank",
-                                    help="Initial bank equity backed by additional reserves. Provides a cushion against loan losses and supports lending under capital and reserve constraints.")
+                                     help="Initial bank equity backed by additional reserves. Provides a cushion against loan losses and supports lending under capital and reserve constraints.")
+            firms = st.number_input("Starting firms", 1, 100, value=widget_default("m_initial_firms", sim.config.firm_count),
+                                    key="m_initial_firms", help="Number of competing goods firms at startup and target for replacement entry. Changing this requires a new scenario; no extra money or capital is created.")
+            dispersion = st.number_input("Initial firm productivity dispersion (%)", 0.0, 100.0,
+                value=widget_default("m_firm_dispersion", float(sim.config.firm_productivity_dispersion * 100)),
+                key="m_firm_dispersion", help="Firm efficiency is drawn uniformly from 1 minus this fraction to 1 plus it, using a separate seeded firm stream. Zero makes initial firm efficiencies identical.")
             if st.form_submit_button("Create monetary scenario", key="m_new_scenario", width="stretch",
                                      help="Replace the current economy and history with these initial conditions and seed at year zero. Keeps active policies, discards unapplied policy edits and pauses playback."):
                 try:
                     new = MonetarySimulation(replace(sim.config, pop_size=int(pop), initial_money_per_person=float(money),
-                        initial_capacity=float(capacity), initial_producer_money=float(producer), initial_bank_capital=float(bank)), int(seed))
+                        initial_capacity=float(capacity), initial_producer_money=float(producer), initial_bank_capital=float(bank),
+                        firm_count=int(firms), firm_productivity_dispersion=float(dispersion) / 100), int(seed))
                 except ValueError as error:
                     st.error(str(error))
                 else:
@@ -289,7 +358,10 @@ def monetary_workspace():
     sections = [
         ("wealth", "Current wealth distribution", []),
         ("living", "Living standards and income", []),
-        ("production", "Economy and production", [("production", "Production and investment settings")]),
+        ("production", "Economy and production", [("production", "Production and investment settings"),
+                                                ("firms", "Firms, labor and research settings")]),
+        ("education", "Education, skills and retraining", [("education", "Education system settings")]),
+        ("energy", "Energy and supply shocks", [("energy", "Energy supply and prices settings")]),
         ("government", "Government budget and taxes", [("taxes", "Net wealth tax settings"),
             ("allocation", "Budget allocation settings"), ("bonds", "Government borrowing settings")]),
         ("transfers", "UBI and pensions", [("pensions", "Pension settings")]),
@@ -308,6 +380,13 @@ def monetary_workspace():
                         monetary_controls(group, label)
                     if name == "government":
                         sovereign_default_controls(sim)
+                    if name == "energy":
+                        st.button("Queue energy supply shock", key="m_queue_energy_shock", on_click=queue_energy_shock,
+                                  disabled=sim.energy.shock_pending,
+                                  help="Pause playback and queue a supply shock for the next simulated year using the active severity and duration. This changes future supply, not history or money balances.")
+                        if sim.energy.shock_pending:
+                            st.button("Cancel queued energy shock", key="m_cancel_energy_shock", on_click=cancel_energy_shock,
+                                      help="Remove the queued scenario shock before advancing. Already active shocks run for their remaining duration.")
             slots[name] = st.container()
     downloads = st.container()
 
@@ -335,6 +414,10 @@ def monetary_workspace():
                             "there is no automatic bailout or deposit insurance in this model.")
             if economy.sovereign_default_pending:
                 st.warning("Sovereign default is queued. The next simulated year cancels government bonds and arrears, not household loans or deposits.")
+            if economy.energy.shock_pending:
+                st.warning("An energy supply shock is queued for the next simulated year.")
+            if last["Energy shock active"]:
+                st.warning("An energy supply shock is active. Reduced production can lower hiring and increase goods costs; existing inventories can buffer sales.")
             if not economy.sovereign_market_access:
                 st.warning("Government bond market access is suspended after sovereign default. "
                            "Treasury spending must rely on remaining cash, taxes and any permitted fiat grants.")
@@ -392,6 +475,23 @@ def monetary_workspace():
             a.metric("Productive capacity", f"{economy.capacity:,.2f}", border=True, help=METRIC_HELP["Productive capacity"])
             b.metric("Real output", f"{economy.output:,.2f}", border=True, help=METRIC_HELP["Real output"])
             c.metric("Population", f"{len(economy.population):,}", border=True, help=METRIC_HELP["Population"])
+            a, b, c = st.columns(3)
+            a.metric("Worker productivity", f"{economy.effective_productivity:,.3f}", border=True, help=METRIC_HELP["Worker productivity"])
+            b.metric("Technology index", f"{economy.technology_index:,.3f}", border=True, help=METRIC_HELP["Technology index"])
+            c.metric("Technology breakthroughs", f"{economy.technology_breakthroughs:,}", border=True, help=METRIC_HELP["Technology breakthroughs"])
+            monetary_trend(trends, ["Worker productivity"], "Worker productivity over time")
+            a, b, c = st.columns(3)
+            a.metric("Unemployment rate", observed_value(last["Unemployment rate"], ".1%"), border=True, help=METRIC_HELP["Unemployment rate"])
+            b.metric("Active firms", f"{int(last['Active firms']):,}", border=True, help=METRIC_HELP["Active firms"])
+            c.metric("Research spending", euro(last["Research spending"]), border=True, help=METRIC_HELP["Research spending"])
+            monetary_trend(trends, ["Employed", "Unemployed"], "Employment and unemployment")
+            monetary_trend(trends, ["Average wage"], "Average wages including research pay")
+            monetary_trend(trends, ["Business loans", "Research spending", "Firm profits"], "Business financing and cash results")
+            monetary_trend(trends, ["Opening inventories", "Unsold goods", "Inventory spoilage"], "Goods inventories and spoilage")
+            monetary_trend(trends, ["Worker productivity", "Adopted worker productivity"], "Technology frontier and firm adoption")
+            monetary_trend(trends, ["Market concentration"], "Sales concentration (HHI)")
+            monetary_trend(trends, ["Productivity growth realized", "Technology productivity gain"],
+                           "Productivity growth and technology breakthroughs", percentage=True)
             monetary_trend(trends, ["Productive capacity", "Output", "Real consumption", "Real investment"], "Production and goods use")
             monetary_trend(trends, ["Real net wealth", "Productive capacity"], "Real household net wealth and productive capacity")
             st.caption("Real net wealth is measured in year-0 euros; productive capacity is measured in capital units. "
@@ -399,8 +499,45 @@ def monetary_workspace():
             monetary_trend(trends, ["Private capital added", "Private capital shortfall"], "Private investment outcomes")
             st.caption(f"Failed private investments last year: {observed_value(last['Failed private investments'], ',.0f')}. "
                        "Shortfall is capital not created relative to full efficiency, not destroyed money or losses on existing wealth.")
-            st.caption("Output is limited by capital and working-age residents. Consumption uses goods; investment converts goods into capital. "
-                       "Unsold goods expire each year. Money printing does not directly increase capacity; there is no wealth cap.")
+            st.caption("Firms forecast demand, carry inventories and hire within payroll and capital limits. Wages respond to lagged inflation, "
+                       "adopted productivity and labor scarcity. Unsold goods carry forward after spoilage; cheaper sellers attract more demand.")
+            st.caption("Research pays employee services from firm cash. Breakthroughs raise a technology frontier; other firms adopt it gradually. "
+                       "Working-capital loans require past sales and profit, plus bank capacity. Failed firms liquidate inventory and default on residual debt; no automatic bailout.")
+        with slots["education"].container():
+            a, b, c = st.columns(3)
+            a.metric("Education funding", euro(last["Education spent"]), border=True, help=METRIC_HELP["Education funding"])
+            b.metric("Teachers", f"{int(last['Teachers']):,}", border=True, help=METRIC_HELP["Teachers"])
+            c.metric("Education quality", observed_value(last["Education quality"], ".1%"), border=True, help=METRIC_HELP["Education quality"])
+            a, b, c = st.columns(3)
+            a.metric("University students", f"{int(last['University students']):,}", border=True, help=METRIC_HELP["University students"])
+            b.metric("Adult trainees", f"{int(last['Adult trainees']):,}", border=True, help=METRIC_HELP["Adult trainees"])
+            c.metric("Mean worker skill", observed_value(last["Mean worker skill"], ".3f"), border=True, help=METRIC_HELP["Mean worker skill"])
+            monetary_trend(trends, ["School students", "University students", "Adult trainees", "Teachers"], "Education participation")
+            monetary_trend(trends, ["School completions", "University graduates", "Training completions", "University dropouts"], "Education outcomes")
+            monetary_trend(trends, ["Education spent", "Education salaries", "Education materials", "Education sector money"], "Education funding and expenditure")
+            monetary_trend(trends, ["Education quality", "Education funding coverage", "Secondary attainment", "University attainment"],
+                           "Education quality and working-age attainment", percentage=True)
+            monetary_trend(trends, ["Mean worker skill"], "Worker skills over time")
+            monetary_trend(trends, ["Mean work experience"], "Average simulated years of work")
+            monetary_trend(trends, ["Work skill gain"], "Skills gained through work")
+            st.caption("Education is a fifth policy allocation after mandatory debt service. Provider cash pays teachers before firms hire, "
+                       "so new appropriations expand teaching capacity mainly next year. Schooling covers ages 6–17; university takes full-time students out of the labor force.")
+            st.caption("Teacher capacity and actual salaries/materials spending limit study progress. Qualifications and training need effective study years, "
+                       "not just elapsed time. Employment also builds skills with diminishing returns and familiarity with the technology used. "
+                       "Gains arrive after production and affect future hiring and wages; human skills are not financial assets.")
+        with slots["energy"].container():
+            a, b, c = st.columns(3)
+            a.metric("Energy price", f"€{economy.energy.price:,.3f}/unit", border=True, help=METRIC_HELP["Energy price"])
+            b.metric("Energy coverage", observed_value(last["Energy coverage"], ".1%"), border=True, help=METRIC_HELP["Energy coverage"])
+            c.metric("Energy spending", euro(last["Energy spending"]), border=True, help=METRIC_HELP["Energy spending"])
+            monetary_trend(trends, ["Energy available", "Energy demand", "Energy used", "Energy unused"], "Primary energy supply and use")
+            monetary_trend(trends, ["Energy price"], "Energy price per physical unit")
+            monetary_trend(trends, ["Energy spending", "Energy income", "Energy sector money"], "Energy payments and household resource income")
+            monetary_trend(trends, ["Energy-limited planned output"], "Planned goods output constrained by energy")
+            st.caption("Firms need energy for new production, not for selling old inventory. Supply is reserved pro rata before hiring; "
+                       "unused quotas are curtailed rather than sold twice or stored. Payroll and energy must both be funded.")
+            st.caption("Energy costs reduce firm cash profits and enter unit-cost pricing. A domestic provider receives the payments and "
+                       "can return cash as household resource income after goods purchases. Supply shocks are reproducible; price and quantity effects are not guaranteed inflation forecasts.")
         with slots["government"].container():
             a, b, c = st.columns(3)
             a.metric("Government money", euro(economy.accounts['Government']), border=True, help=METRIC_HELP["Government money"])
@@ -420,7 +557,7 @@ def monetary_workspace():
             allocation_view(economy.policy_budget,
                 [last[f"{name} allocation fraction"] for name in economy.budget_allocations], economy.spent, key="monetary")
             st.caption("Last recorded year; active settings apply next year. Debt principal is included as a cash outflow, not an operating expense.")
-            st.caption("Debt service is mandatory and paid before the four policy allocations. "
+            st.caption("Debt service is mandatory and paid before the five policy allocations. "
                        "If cash is insufficient, refinancing is attempted when borrowing is enabled; otherwise principal and coupons remain owed. "
                        "The debt ceiling limits net borrowing, but matched redemptions can refinance matured principal without a net increase.")
             monetary_trend(trends, ["Government debt", "Government market debt", "Government arrears"], "Contractual debt, market value and arrears")
@@ -535,14 +672,14 @@ def monetary_workspace():
             a.metric("Goods demand coverage", observed_value(last["Goods demand coverage"], ".1%"),
                      border=True, help=METRIC_HELP["Goods demand coverage"])
             b.metric("Unsold goods", f"{last['Unsold goods']:,.2f}", border=True, help=METRIC_HELP["Unsold goods"])
-            monetary_trend(trends, ["Desired goods spending", "Output at trade prices"],
+            monetary_trend(trends, ["Desired goods spending", "Goods supply value", "Output at trade prices"],
                            "Goods spending versus supply value (before price adjustment)")
             st.caption("Base money = bank reserves. Broad money = all non-bank deposits, including treasury, goods producers and healthcare providers. "
                        "A base-money cap does not cap bank deposits. A broad-money cap also constrains bank credit and distributions. "
                         "Prices adjust to desired goods spending relative to output; annual changes are bounded at −10% / +25% for numerical stability.")
-            st.caption("Demand coverage below 100% causes deflation in this model. Production follows available capacity and workers, "
-                       "not expected sales; unsold goods expire. Saving, retained profits and treasury balances can keep demand below supply "
-                       "even when broad money is unchanged. This is a simplified goods-price index, not a calibrated consumer price index.")
+            st.caption("Demand coverage compares desired spending with goods offered, including carried inventories. Firms adjust prices using their "
+                       "own demand and unit labor costs. Inflation uses fixed opening-year firm weights, not changing sales shares. "
+                       "Saving and retained balances can still weaken demand. This goods-price index is not a calibrated CPI.")
         with slots["age"].container():
             age_distribution(people, display["age_bin"], display["age_unit"])
             monetary_trend(trends, ["Population", "Deaths"], "Population and deaths")
@@ -552,14 +689,37 @@ def monetary_workspace():
                 st.dataframe(balances, hide_index=True, column_config=table_columns(balances),
                              alt="Sector assets, liabilities and net worth")
                 st.caption("The fiat issuer starts with negative equity equal to issued base money; additional grants reduce it further. "
-                           "It is not subject to the commercial bank's solvency rule. Consolidated sector net worth equals real capital valued at current prices.")
-                errors = {name: float(last[name]) for name in ("Money balance error", "Base money balance error", "Government balance error")}
+                            "It is not subject to the commercial bank's solvency rule. Consolidated net worth equals productive capital plus firm inventories at current prices.")
+                errors = {name: float(last[name]) for name in ("Money balance error", "Base money balance error", "Government balance error",
+                                                             "Government debt balance error")}
                 reconciliation = pd.DataFrame({"Reconciliation": errors.keys(), "Error": errors.values()})
                 st.dataframe(reconciliation, hide_index=True, column_config=table_columns(reconciliation),
-                             alt="Money, base money and government account reconciliation errors")
+                              alt="Money, base money and government account reconciliation errors")
+                inventory_error = pd.DataFrame({"Inventory balance error": [last["Inventory balance error"]]})
+                st.dataframe(inventory_error, hide_index=True, column_config=table_columns(inventory_error),
+                             alt="Physical goods inventory reconciliation error")
+                energy_errors = pd.DataFrame({key: [last[key]] for key in ("Energy balance error", "Energy input balance error")})
+                st.dataframe(energy_errors, hide_index=True, column_config=table_columns(energy_errors),
+                             alt="Primary energy supply and production input reconciliation")
                 st.dataframe(people, hide_index=True, column_config=table_columns(people),
                              alt="Individual money, capital, bonds, loans, net wealth, pensions and healthcare")
-                contracts = {"loans": [asdict(x) for x in economy.loans], "bonds": [asdict(x) for x in economy.bonds]}
+                contracts = {"loans": [asdict(x) for x in economy.loans], "bonds": [asdict(x) for x in economy.bonds],
+                             "business_loans": [asdict(x) for x in economy.firm_loans]}
+                firms_frame = pd.DataFrame(economy.market.rows())
+                st.subheader("Firm accounts and competition", help="Firm prices, cash, inventories, employment, research and business debt. Capital is leased from existing owners, not duplicated as firm assets.")
+                st.dataframe(firms_frame, hide_index=True, column_config=table_columns(firms_frame),
+                             alt="Competing firms with individual prices, productivity, employment and financing")
+                if economy.market.events:
+                    st.dataframe(pd.DataFrame(economy.market.events), hide_index=True, alt="Firm entries and failures")
+                if economy.education.events:
+                    st.subheader("Education outcomes history", help="Retained secondary completions, university graduations/dropouts and adult training completions, with year and resident identifier.")
+                    st.dataframe(pd.DataFrame(economy.education.events), hide_index=True, alt="Education completions and dropout events")
+                if economy.energy.events:
+                    st.subheader("Energy shock history", help="Queued and random supply disruptions with their start year, loss fraction and configured duration. Retains up to 1,000 events.")
+                    st.dataframe(pd.DataFrame(economy.energy.events), hide_index=True, alt="Primary energy supply shock events")
+                business_loans = pd.DataFrame(contracts["business_loans"])
+                st.dataframe(business_loans, hide_index=True, column_config=table_columns(business_loans),
+                             alt="Outstanding business loan contracts")
                 st.subheader("Percentile wealth shares", help="Current wealth totals and shares for equally sized groups, from poorest to richest. Shares refer to wealth, not the number of residents.")
                 st.dataframe(shares, hide_index=True, column_config=table_columns(shares),
                              alt="Net wealth amounts and shares by population percentile")
@@ -576,6 +736,11 @@ def monetary_workspace():
                     events = pd.DataFrame(economy.sovereign_events)
                     st.dataframe(events, hide_index=True, column_config=table_columns(events),
                                  alt="Sovereign defaults with cancelled principal, interest and creditor losses")
+                if economy.technology_events:
+                    st.subheader("Technology breakthrough history", help="Economy-wide innovations drawn from a separate seeded random stream. Each event permanently raises the technology index.")
+                    events = pd.DataFrame(economy.technology_events)
+                    st.dataframe(events, hide_index=True, column_config=table_columns(events),
+                                 alt="Technology breakthroughs by year and proportional productivity gain")
                 if economy.policy_changes:
                     st.subheader("Policy changes", help="Retained record of applied policy changes and the years they take effect. Draft edits are not recorded; at most 1,000 changes are kept.")
                     changes = pd.DataFrame(economy.policy_changes)
@@ -583,14 +748,16 @@ def monetary_workspace():
                 for label, frame, filename in [
                     ("Download monetary history CSV", history, "monetary-history.csv"),
                      ("Download monetary population CSV", people, "monetary-population.csv"),
-                     ("Download finance ledger CSV", history[finance_columns], "monetary-finances.csv"),
+                      ("Download finance ledger CSV", history[finance_columns], "monetary-finances.csv"),
+                     ("Download firm accounts CSV", firms_frame, "monetary-firms.csv"),
                     ("Download sector balance sheets CSV", pd.DataFrame(economy.balance_sheets()), "sector-balances.csv"),
                     ("Download transaction ledger CSV", pd.DataFrame(economy.transactions), "monetary-transactions.csv")]:
                     st.download_button(label, export_frame(frame).to_csv(index=False), filename, "text/csv",
                                        help={
                                            "monetary-history.csv": "Export all retained annual observations, not just the years visible in trend charts. History retains up to 10,000 years.",
                                            "monetary-population.csv": "Export a current snapshot of living residents, including age, deposits, capital, bonds, loans, net wealth and care choices.",
-                                           "monetary-finances.csv": "Export retained annual treasury funding, policy payments, debt service and cash-balance reconciliation.",
+                                            "monetary-finances.csv": "Export retained annual treasury funding, policy payments, debt service and cash-balance reconciliation.",
+                                            "monetary-firms.csv": "Export current firm prices, inventories, expected demand, employment, research, profits, deposits and business debt, including failed firms.",
                                            "sector-balances.csv": "Export current assets, liabilities and net worth for each sector, including the bank and fiat issuer.",
                                            "monetary-transactions.csv": "Export the latest 10,000 ledger entries, including labeled non-cash events such as write-offs. This may not cover the entire run.",
                                        }[filename])
@@ -599,6 +766,17 @@ def monetary_workspace():
                              "current_parameters": asdict(economy.config), "policy_changes": list(economy.policy_changes),
                              "sovereign_events": list(economy.sovereign_events), "sovereign_default_pending": economy.sovereign_default_pending,
                              "sovereign_reputation_penalty": economy.reputation_spread, **contracts}
+                settings["technology_events"] = list(economy.technology_events)
+                settings["technology_index"] = economy.technology_index
+                settings["technology_breakthroughs"] = economy.technology_breakthroughs
+                settings["firms"] = economy.market.rows()
+                settings["firm_events"] = list(economy.market.events)
+                settings["education_events"] = list(economy.education.events)
+                settings["education_training_demand"] = economy.education.training_demand
+                settings["energy_events"] = list(economy.energy.events)
+                settings["energy_supply_index"] = economy.energy.supply_index
+                settings["energy_shock_pending"] = economy.energy.shock_pending
+                settings["energy_shock_remaining"] = economy.energy.shock_remaining
                 st.download_button("Download monetary scenario settings", json.dumps(settings, indent=2), "monetary-scenario.json", "application/json",
                                    help="Export JSON with the seed, initial and active parameters, retained policy changes and current contracts. This documents the run but is not a full save-state checkpoint.")
                 st.caption("History retains 10,000 years; the transaction ledger retains the latest 10,000 entries, including labeled non-cash events. "

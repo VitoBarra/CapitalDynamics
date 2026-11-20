@@ -8,9 +8,13 @@ class InflationTests(unittest.TestCase):
     def economy(self, money, **changes):
         config = MonetaryConfig(pop_size=1, initial_money_per_person=money,
             initial_capacity=10, productivity=10, initial_producer_money=0,
+            productivity_growth=0, technology_breakthrough_probability=0,
+            firm_count=1, firm_productivity_dispersion=0, initial_demand_fraction=1,
+            inventory_target=0, research_spending_fraction=0,
             wage_fraction=0, tau_max=0, private_investment_fraction=0,
             ubi_budget_fraction=0, pension_budget_fraction=0,
             healthcare_spending_fraction=0, investment_budget_fraction=0,
+            education_budget_fraction=0, energy_intensity=0,
             consumption_fraction=1, policy_rate=0, delta=0,
             birth_prob_max=0, death_base_prob=0, aging_risk_rate=0,
             healthcare_choice_mode="Public only")
@@ -47,9 +51,9 @@ class InflationTests(unittest.TestCase):
         sim = MonetarySimulation(MonetaryConfig(pop_size=10))
         sim.advance(15)
         for row in list(sim.history)[1:]:
-            self.assertAlmostEqual(row["Output"], row["Real consumption"]
-                                   + row["Real investment"] + row["Unsold goods"])
-            coverage = row["Goods demand coverage"]
-            if coverage is not None:
-                expected = max(-.1, min(.25, sim.config.inflation_response * (coverage - 1)))
-                self.assertAlmostEqual(row["Inflation"], expected)
+            self.assertAlmostEqual(row["Opening inventories"] + row["Output"], row["Real consumption"]
+                                   + row["Real investment"] + row["Unsold goods"]
+                                   + row["Real education goods"]
+                                   + row["Inventory spoilage"] + row["Inventory scrapped"])
+            self.assertGreaterEqual(row["Inflation"], -.1 - 1e-9)
+            self.assertLessEqual(row["Inflation"], .25 + 1e-9)

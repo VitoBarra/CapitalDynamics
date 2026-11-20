@@ -1,6 +1,6 @@
 # Capital Dynamics
 
-An interactive euro-denominated monetary economy sandbox with production, prices, banking, government bonds, taxes, UBI, pensions, healthcare and demographics. It is an experimental accounting model, not a forecast or a calibrated model of the euro area.
+An interactive euro-denominated monetary economy sandbox with competing firms, jobs, education, skills, research, technology adoption, banking, government debt, taxes, UBI, pensions, healthcare and demographics. It is an experimental accounting model, not a forecast or a calibrated model of the euro area.
 
 ## Getting started
 
@@ -50,7 +50,7 @@ Available settings: `PORT` (host port, default 8501) and `IMAGE` (default `capit
 
 The app contains one monetary model. There are no old-model adapters, session migrations or alternate budget regimes. Restart the Streamlit app after updating; old running sessions and scripts using removed APIs are not supported.
 
-- **Scenario:** choose one of six reproducible comparison presets, or create an economy using a seed, population, household money, productive capacity, producer money and bank capital.
+- **Scenario:** choose one of six reproducible comparison presets, or create an economy using a seed, population, household money, productive capacity, producer money, bank capital and number/productivity dispersion of firms.
 - **Batch:** advance a chosen number of years in the same economy.
 - **Live:** start, pause, resume or single-step while paused. Refresh interval and years per refresh control playback speed. Live playback stops on extinction.
 - **Reset monetary scenario:** restart using the active policies and original seed. A cap below initial money supply is rejected without discarding the current economy.
@@ -66,7 +66,9 @@ Major sections have bordered boxes. The app supports coordinated light and dark 
 | --- | --- |
 | Current wealth distribution | Individual net wealth, percentile shares, nominal/real wealth and Gini history. Negative wealth uses signed percentile totals rather than a misleading pie; conventional Gini is unavailable when any household has negative wealth. |
 | Living standards and income | Median personal disposable income and purchasing power, personal low-income proxy, consumption per resident, age-band pension replacement ratio, and dated official calibration references. |
-| Economy and production | Productive capacity, output, consumption, investment, real household net wealth versus capacity, private capital added, failed investments and capital shortfalls. |
+| Economy and production | Demand-responsive firm output, employment/unemployment, wages, inventories, capital, price competition, research, technology frontier/adoption and market concentration. |
+| Education, skills and retraining | Education funding, teacher jobs, schooling, university, adult training, quality, completions, attainment and personal skills. |
+| Energy and supply shocks | Paid production energy, physical supply/use, scarcity quotes, firm bills, resource income and queued/random disruptions. |
 | Government budget and taxes | Tax curve, actual applied rates, tax receipts, treasury money/debt, funding sources, common-budget allocation, latest spending breakdown, expenditure history and annual cash reconciliation. |
 | UBI and pensions | Equal UBI, pension payments, recipient/eligibility data and pension shortfalls. |
 | Healthcare, aging and mortality | Public funding, private premiums, provider money, public/private patient counts, mortality history and death-risk curves by age. |
@@ -98,7 +100,7 @@ Annual personal disposable income includes cash wages, transfers, household divi
 
 ### Shared-budget allocation
 
-Set all percentages together under **Government budget and taxes → Budget allocation settings**. UBI, pensions, healthcare, public investment and debt service each use the same total treasury budget. Totals above 100% are rejected atomically. Unallocated or unused funds stay with government; unused pension allocations do not increase another policy's allocation.
+Set all percentages together under **Government budget and taxes → Budget allocation settings**. UBI, pensions, healthcare, public investment and education share the treasury budget **remaining after mandatory debt service**. Totals above 100% are rejected atomically. Unallocated or unused funds stay with government. Government refinancing is attempted when enabled; unresolved principal/coupons carry forward. Confirmed sovereign default imposes creditor losses, exclusion and a lingering borrowing spread.
 
 Allocation and actual-expenditure bars have explicit, separate denominators and matching policy colors. Figures describe the last recorded year; active policy changes apply next year.
 
@@ -111,6 +113,63 @@ Under **Accounts, contracts and downloads**, inspect and download:
 - Annual government finance ledger: opening money, taxes, borrowing, issuance, estates, payments, closing money and reconciliation error.
 - Sector balance sheets and transaction ledger, including labeled non-cash events.
 - Loan/bond contracts, percentile shares, policy changes, and scenario settings (seed, initial/current parameters, contracts and interventions).
+- Firm snapshots/CSV: separate prices, inventories, expected sales, employees, wages, research, adopted technology, cash profits and business debt. Scenario JSON includes firms, business contracts and retained entry/failure and technology events.
+
+### Firms, jobs and innovation
+
+Under **Economy and production → Firms, labor and research settings**, adjust
+forecast learning, inventory buffers/spoilage, price competition, wage bargaining,
+research intensity, adoption speed, failure/entry and optional working-capital
+lending. Five firms start by default, funded from existing producer money.
+
+Firms carry unsold goods and reduce production/hiring when inventories build.
+Higher wage offers recruit first; actual output also needs leased productive
+capital. Research pays employees from firm cash and affects next year's discovery
+and adoption. Innovations raise a frontier that firms approach gradually.
+Price competition, heterogeneous efficiency and constrained finance can produce
+business failures and concentration; no automatic bailout or replacement funding
+is assumed. Replacement startup contributions are grants, not tracked shares.
+
+Consolidated sector net worth includes productive capital **plus inventories**.
+History reconciles physical stock changes as well as money and sovereign debt.
+The model can still generate deflation or persistent unemployment; these new
+mechanisms do not enforce an inflation or employment target.
+
+### Education and skills
+
+Education receives a configurable allocation (default 10%) from the policy
+budget. Under **Education, skills and retraining**, configure teachers, resources,
+study duration, adult training, skill gains/depreciation and wage premiums.
+Provider cash pays teacher jobs before firms hire, so new funding usually
+expands teaching capacity from the following year.
+
+Schooling covers ages 6–17; full-time university students leave the labor force.
+Teaching capacity and actual resources limit study progress. University and
+adult training require effective funded years, with dropout under sustained
+underfunding. Skills affect future hiring, pay and technology use, but neither
+guarantee jobs nor create financial wealth. Outcomes, credits and skills are
+reported in charts, resident CSV and scenario JSON.
+
+Skills also accumulate through completed years of work, with diminishing gains
+near the skill ceiling. Employees learn the technology they actually use;
+unemployment pauses experience accumulation. Learning rates are configurable
+in education settings, and resident exports include simulated years of work.
+
+### Energy
+
+Under **Energy and supply shocks**, adjust primary supply/growth, energy per
+good, base price/scarcity sensitivity, household resource-income recycling and
+random shock severity/duration. **Queue energy supply shock** pauses playback
+and schedules a disruption for the next year; it can be cancelled before
+advancing.
+
+Firms must fund energy alongside payroll and cannot produce beyond their
+pro-rata supply quota. Bills reduce profits and enter goods pricing. Old goods
+inventories can still be sold during an outage. Payments remain domestic
+deposits, and the provider can return cash as household resource income.
+Energy has separate physical units and reconciliation; it is not double-counted
+as goods or capital. Supply is an exogenous resource flow, not a detailed model
+of power plants, fuel extraction, grid dispatch, imports or emissions.
 
 History retains 10,000 years; the transaction ledger retains 10,000 entries and policy history 1,000 changes. Downloads include retained records, not unlimited archives. Settings document the run, not a full state checkpoint; reproducing a long run also requires any policy changes that have aged out of the retained history.
 

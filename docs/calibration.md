@@ -86,6 +86,56 @@ illustrative assumptions. They are not fitted to sovereign yields, default
 frequencies or recovery data. Explicit total repudiation is a scenario action,
 not a forecast or a legal sovereign-bankruptcy procedure.
 
+## Technology assumptions
+
+The 1% annual productivity trend, 5% exogenous annual breakthrough chance and
+uniform 2–10% gain are illustrative, not fitted productivity statistics.
+This is a labor-productivity frontier, not total factor productivity estimated
+from a production function. Firms pay for research services and adopt the
+frontier gradually; research effectiveness, diffusion speed and initial firm
+efficiency dispersion are scenario assumptions, not estimated innovation data.
+Technology itself creates neither productive capital nor purchasing power.
+
+## Firm and labor-market assumptions
+
+Demand forecasts, inventory buffers/spoilage, price-elastic purchase weights,
+cost markups, wage bargaining, cash-distress exit and startup grants are
+transparent heuristics. Employment measures goods-sector jobs, not ILO survey
+unemployment. Initial firms receive transfers from existing producer deposits;
+capital is operated through cost-free leases without duplicating ownership.
+Business credit uses past cash profit and sales with bank constraints, not
+an estimated corporate credit model. Cash profit and quote-valued inventory
+are not full IFRS accounts. There is no calibration claim for the resulting
+inflation, employment, firm size distribution or concentration.
+
+## Education assumptions
+
+The education allocation, teacher salary/ratio, annual resource target,
+quality-limited credits, enrollment probabilities, course lengths, skill gains,
+depreciation and wage/productivity premiums are scenario assumptions. They are
+not fitted school spending, ISCED attainment, survey unemployment or causal
+returns to education. Startup schooling is synthetic and skills are normalized
+to one. Human skills are not priced as financial assets. Formal evaluation
+would require cohort attainment/completion data, actual education spending,
+teacher capacity and carefully identified employment/earnings effects.
+
+On-the-job learning (default 0.02 baseline skill points and 10% technology-gap
+closure per employed year) and its diminishing-return rule are also scenario
+assumptions, not estimated experience–earnings profiles. Tracked experience
+counts years worked during the simulation, not inferred pre-simulation careers.
+
+## Energy assumptions
+
+Primary energy uses illustrative physical units, not fitted MWh or fossil-fuel
+equivalents. Baseline supply, energy intensity, nominal quotes, bounded scarcity
+premia, non-transferable pro-rata quotas and shock probabilities/durations are
+scenario assumptions. The primary-resource provider has no separately modeled
+generation/extraction costs, capital or jobs; resource income is recycled within
+domestic deposits. There is no calibrated energy CPI weight, dispatch/fuel mix,
+import exposure, carbon price or climate claim. A data-informed extension would
+need physical energy balances, input-output intensities, generation costs and
+institutions, and country-specific price pass-through evidence.
+
 ## Further official datasets located
 
 - [Eurostat `demo_mlifetable`: life tables by age and sex](https://ec.europa.eu/eurostat/databrowser/view/demo_mlifetable/default/table)

@@ -74,7 +74,7 @@ class MonetaryTests(unittest.TestCase):
         return sim
 
     def assert_balanced(self, sim):
-        self.assertAlmostEqual(sum(x['Net worth'] for x in sim.balance_sheets()), sim.capacity * sim.price, places=7)
+        self.assertAlmostEqual(sum(x['Net worth'] for x in sim.balance_sheets()), sim.real_asset_value, places=7)
         self.assertTrue(all(v >= -1e-8 and math.isfinite(v) for v in sim.accounts.values()))
         for key in ('Money balance error', 'Base money balance error', 'Government balance error'):
             self.assertAlmostEqual(sim.history[-1].get(key, 0), 0, places=7)
@@ -196,7 +196,10 @@ class MonetaryTests(unittest.TestCase):
     def test_printing_can_raise_prices_without_increasing_output(self):
         settings = dict(ubi_budget_fraction=1, pension_budget_fraction=0,
             healthcare_spending_fraction=0, investment_budget_fraction=0,
-            private_investment_fraction=0, delta=0)
+            education_budget_fraction=0,
+            private_investment_fraction=0, delta=0, firm_count=1,
+            firm_productivity_dispersion=0, initial_demand_fraction=1, inventory_target=0,
+            wage_fraction=0, research_spending_fraction=0)
         baseline = self.economy(**settings)
         printing = self.economy(**settings, monetary_financing=True, issuance_per_step=50)
         baseline.advance()

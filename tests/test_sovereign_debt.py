@@ -21,11 +21,11 @@ class SovereignDebtTests(unittest.TestCase):
 
     def assert_balanced(self, sim):
         self.assertAlmostEqual(sum(row["Net worth"] for row in sim.balance_sheets()),
-                               sim.capacity * sim.price, places=7)
+                               sim.real_asset_value, places=7)
         self.assertTrue(all(value >= -1e-8 for value in sim.accounts.values()))
 
-    def test_only_four_discretionary_allocations_remain(self):
-        self.assertEqual(len(ALLOCATION_FIELDS), 4)
+    def test_debt_service_is_not_a_discretionary_allocation(self):
+        self.assertEqual(len(ALLOCATION_FIELDS), 5)
         self.assertNotIn("debt_service_fraction", {field.name for field in fields(MonetaryConfig)})
         self.assertNotIn("principal_first", {field.name for field in fields(MonetaryConfig)})
 

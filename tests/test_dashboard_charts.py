@@ -29,5 +29,5 @@ class DashboardChartTests(unittest.TestCase):
         self.assertEqual(shares['Wealth share'].sum(), 0)
 
     def test_policy_colors_are_consistent_across_charts(self):
-        names = ['UBI spent', 'Pensions spent', 'Healthcare spent', 'Public investment spent', 'Debt service spent']
-        self.assertEqual(series_scale(names).to_dict()['range'], COLORS[:5])
+        names = ['UBI spent', 'Pensions spent', 'Healthcare spent', 'Public investment spent', 'Education spent', 'Debt service spent']
+        self.assertEqual(series_scale(names).to_dict()['range'], COLORS[:6])

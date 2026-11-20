@@ -32,16 +32,28 @@ price level. A conventional bounded Gini is not reported when net wealth can
 be negative. Sector net worth is shown separately; residents are not assigned
 fictional shares of bank or public equity.
 
-The production, healthcare and treasury sectors all have deposit accounts.
+Five goods firms start with separate zero deposit balances. In year one,
+80% of the initial production holding-sector money funds them equally; 20%
+remains with the holding/collateral dealer. This is a transfer, not additional
+money. Starting inventory is zero. Firm cash and inventory are separate sector
+assets; household net wealth does not include fictitious firm equity shares.
+After production, consolidated net worth includes productive capital **and**
+inventories, each valued at current prices.
+
+The production holding sector, firms, healthcare, education, primary energy and treasury have deposit accounts.
 There is one commercial bank, no physical cash and no interbank market.
 
 ## Annual sequence
 
-1. Depreciate capital. Potential goods output is the lesser of productive
-   capacity and working-age residents × productivity. There is no wealth cap.
-2. The producer pays available wages, limited by its deposits and the wage
-   fraction of potential output at the current price. Workers are adults below
-   retirement age; there is no separate job-matching market.
+1. Advance the technology frontier, draw discoveries using last year's funded
+   research, and diffuse technology to firms. Depreciate productive capital.
+2. Enroll school/university participants and pay teachers from opening education
+   deposits before firms recruit. Apply inventory spoilage, fund replacement entry, bargain firm
+   wages and forecast production from sales expectations and inventories.
+   Firms reserve primary energy pro rata, then hire available residents within
+   combined payroll/energy funding and credit limits. Produce within energy,
+   leased-capital and adopted-productivity limits, paying ordinary wages,
+   energy inputs and any funded research services.
 3. Service existing household loans: accrued interest first, then scheduled
    principal. Collect net wealth taxes, limited by liquid money. Uncollected
    tax is reported, not carried as tax arrears.
@@ -49,17 +61,20 @@ There is one commercial bank, no physical cash and no interbank market.
    refinancing plus additional policy borrowing, subject to buyer willingness,
    bank constraints, exclusion and the debt ceiling. Proceeds and grants are
    financing, not taxes. Carry unpaid obligations forward.
-5. Freeze the remaining treasury policy budget. Reserve four percentages
-   for UBI, budget-limited pensions, healthcare and public investment.
+5. Freeze the remaining treasury policy budget. Reserve five percentages
+   for UBI, budget-limited pensions, healthcare, public investment and education.
 6. Buy public investment goods; working adults request private investment
    and optional investment credit. Ration private investment goods and credit
    proportionally. Spending moves deposits to producers; purchased goods
    become real capital with configurable efficiency and private failure risk.
 7. Households buy consumption goods, rationed proportionally if necessary.
-   Consumption destroys goods, not money. Unused goods expire each year.
-8. Adjust prices using desired nominal goods spending / output value. Price
-   adjustment is gradual, bounded at −10% / +25% annually, with a positive
-   numerical price floor. Recycle producer profits and healthcare income to
+   Consumption destroys goods, not money. The education provider then buys
+   available materials and advances study, training and work learning after production.
+   Unsold goods remain firm inventory.
+8. Service business debt, resolve failed firms, update firm prices using their
+   own demand and unit costs, and calculate the fixed-opening-weight price index.
+   Individual quote changes are bounded at −10% / +25% annually with a positive
+   numerical floor. Recycle positive firm cash profits, energy resource income and healthcare income to
    households. Distribute a configurable fraction of excess bank equity,
    subject to capital, liquidity and money-cap limits.
 9. Update healthcare quality using real funding. Residents may buy indexed
@@ -74,7 +89,7 @@ goods-capacity calculation; there are no separate medical workers or queues.
 
 All funding percentages are edited **together** under government settings.
 They must total at most 100%. Defaults are UBI 25%, pensions 20%, healthcare
-25%, investment 15%, unallocated 15%. Debt service has no allocation control.
+25%, investment 15%, education 10%, unallocated 5%. Debt service has no allocation control.
 
 The denominator is **treasury money remaining after mandatory debt service**:
 opening money + collected taxes + bond proceeds + fiat grants − debt payments.
@@ -83,7 +98,7 @@ stay in treasury; they do not spill into another policy.
 
 The allocation bar always includes unallocated funds. A second bar shows
 **actual cash expenditure percentages**, with a different denominator: the
-sum actually paid to the four policies. Tables show allocated, spent and unused amounts. Bond
+sum actually paid to the five policies. Tables show allocated, spent and unused amounts. Bond
 principal repayment is a cash outflow here, not an operating expense.
 Charts describe the last recorded year; policy changes apply next year.
 
@@ -132,42 +147,286 @@ years (default three). Each default adds an 8-percentage-point reputation
 penalty by default, recovering by 10% annually; it persists after exclusion.
 Default events and nominal debt reconciliations are exported and displayed.
 
-## Why the baseline tends to deflate
+## Competing firms, inventories and demand
 
-The price rule is `inflation_response × (desired goods spending / output value − 1)`,
-bounded at −10% / +25%, with an absolute price floor. Output value uses the
-opening transaction price, not the closing price. Desired goods spending includes
-consumption and investment before rationing; taxes, transfers, bond purchases
-and healthcare funding are not goods demand.
+Firms have independent cash accounts, prices, productivity, sales forecasts,
+wage offers, inventories and debt. Initial efficiency is drawn uniformly
+between 0.85 and 1.15 by default, using a separate seeded firm RNG.
 
-With the default seed/settings, a 30-year diagnostic run produced negative
-inflation in all 30 years: approximately −6.50% in year 1, −5.32% in year 10
-and −3.32% in year 30. First-year demand covered about 35% of output value,
-leaving about 79.24 goods unsold. Broad money stayed at €200: deflation did
-not require money destruction.
+Expected startup sales total 65% of initial capital/labor potential. Forecasts
+then adjust 40% toward current desired unit purchases each year. Planned output
+is `max(0, expected sales × (1 + inventory target) − usable inventory)`.
+The default inventory buffer is 15%; opening stock loses 10% to spoilage.
+Firms therefore cut production/hiring after weak sales or excess inventories,
+rather than producing at full capacity indefinitely.
 
-This is a structural limitation, not a reversed inflation sign:
+Existing household/public/holding capital is operated under cost-free leases,
+not duplicated on firm balance sheets. Capacity-use weights are 20% equal
+access plus 80% expected-sales share. Total actual production cannot exceed
+physical capacity or output supported by hired labor.
 
-- Production always uses available capital/workers without responding to
-  expected sales; unsold goods expire rather than reducing next year's output.
-- Residents consume only part of liquid money. Producers retain profits and
-  treasury balances are only partly spent; deposits held there do not directly
-  buy household consumption goods.
-- Credit and fiat financing are disabled by default. Investment can increase
-  productive capacity without a matching increase in nominal goods demand.
-- There is no wage bargaining, cost-push pricing, inflation expectation or
-  central-bank inflation target. The goods-price index is not a calibrated CPI.
+Goods buyers choose identical price-weighted baskets, with nominal purchase
+weights proportional to `price ** -price_competition` (default exponent 2).
+Stockouts redirect remaining budgets to stocked firms. Buyers in a batch share
+rationing proportionally; public investment precedes private investment, then
+consumption. Actual units are summed at individual transaction quotes, **not**
+computed by dividing total money spent by the aggregate price index.
 
-The dashboard and exports report desired goods spending, output at trade
-prices, demand coverage and unsold goods to expose this mechanism. Coverage
-below 100% pushes prices down; above 100% pushes them up. Coverage is undefined
-with zero output. Tests cover deflation, stable prices and positive inflation.
-Increasing spending or reducing supply can produce inflation, but printing
-money alone does not guarantee it: the new deposits must reach goods demand.
-No positive inflation floor or silent parameter retuning is applied.
+The annual physical identity is:
 
-A demand-responsive production/inventory and wage-setting model would be a
-separate economic extension, not an accounting correction.
+`opening inventories + production = consumption + investment + education goods + closing
+inventories + spoilage + failure scrapping`.
+
+Inventories are marked to each firm's quote, not bank deposits or productive
+capital. CSV history includes a physical inventory reconciliation. This is
+illustrative current-price accounting, not inventory-at-historical-cost IFRS.
+
+## Employment and wage bargaining
+
+The labor force is every resident aged 18 to retirement age except full-time
+university students. Funded education jobs recruit first; firms hire integer
+numbers of workers to meet planned production, subject to wage funding; higher
+wage offers recruit first with seeded tie-breaking. Each resident has at most
+one employer (goods firm or education provider). Unhired residents have no job wages but can receive
+UBI, property income and healthcare income. Employment statistics are frozen
+before demographics and describe goods/education jobs, not survey unemployment.
+There is no separate healthcare labor market or explicit part-time hours.
+
+The initial wage is base productivity × wage fraction. Subsequent wage growth
+combines 50% of lagged inflation, 50% of the firm's adopted productivity gain,
+and `0.1 × (6% reference unemployment − last unemployment)` by default.
+Annual wage changes are bounded at −10% / +20%. The unemployment reference is
+not an enforced employment rate. Changing the wage fraction scales current
+offers without resetting technology or jobs/history.
+
+## Firm prices and inflation
+
+Each firm targets the larger of its excess-demand-adjusted quote and unit
+payroll/research/energy cost × (1 + markup). Markup defaults to 10%. Quote changes
+are bounded at −10% / +25%. No positive inflation floor is imposed.
+
+The aggregate index chains weighted **price relatives**, using fixed
+opening-year capacity-planning weights. Changing market shares or a firm's
+exit alone therefore cannot mechanically generate inflation. It is a model
+goods-price index, not a calibrated CPI or observed average transaction price.
+
+Demand coverage divides desired nominal consumption/investment by all goods
+offered at firm transaction quotes, including usable opening inventory.
+It is undefined without supply; old stocks can be sold even with zero new
+output. Coverage is a diagnostic, not an exact aggregate inflation formula
+because firms also react to costs and their individual demand.
+
+Demand-responsive production removes the previous forced-full-output bias.
+It does **not** guarantee stable or positive inflation: saving, retained firm
+cash, treasury balances, unemployment and credit constraints can still weaken
+spending. More technology without more demand can reduce labor demand.
+There is still no central-bank inflation target or expectations mechanism.
+
+## Productivity growth and technology
+
+Frontier worker productivity is base productivity × the technology index.
+The index starts at 1 and advances before each year's production by
+`(1 + productivity_growth) × (1 + breakthrough_gain)`. Default gradual growth
+is 1% annually. A separate seeded random stream draws at most one economy-wide
+breakthrough each year, with default probability 5% and a uniformly drawn
+permanent productivity gain between 2% and 10%. A 5% chance means a 20-year
+expected waiting time, not an event every 20 years.
+
+Firms adopt the frontier gradually, closing 20% of their technology gap
+annually by default, in addition to trend learning. Actual productivity is
+base productivity × firm efficiency × adopted technology.
+
+Firms spend 3% of post-payroll cash on research employee services by default.
+This is paid household income and a firm expense, not a capitalized magic asset.
+Next year's research intensity is paid research / max(sales, initial household
+money). Firm discovery probability is `min(1, 2 × intensity)`; extra adoption
+speed is `2 × intensity`, with total speed capped at 100%. A firm innovator
+uses its discovery immediately, while rivals catch up gradually.
+Several firms can innovate in one year in addition to the exogenous discovery.
+Research services have a cash cost but no separately modeled hours or patents.
+
+Growth and breakthrough settings can change during a run. Changing base
+productivity preserves accumulated technology. Disable trend growth, exogenous
+breakthroughs and research-led breakthroughs to freeze the frontier rather
+than reset it. Existing adoption gaps can still close; a new scenario resets all.
+
+The dashboard reports effective productivity, the technology index, annual
+growth and breakthrough counts. Retained history/CSV includes event-year
+indicators and gains; the scenario JSON also includes the index, total count
+and retained event list. Technology events retain up to the history limit.
+The independent technology RNG avoids shifting demographic/investment random
+draws merely because innovations are enabled; economic effects can still
+indirectly change subsequent outcomes.
+
+## Primary energy and supply shocks
+
+New goods require paid energy inputs (default 0.25 energy units per good).
+Primary supply is an exogenous annual domestic resource flow, default 30 units;
+it is **not** additional goods capital, inventory, or empirically calibrated
+MWh. Energy is not stored. Existing goods inventories can be sold without
+using energy again. Healthcare and teaching do not have separately modeled
+direct energy requirements, though shortages can ration their goods inputs.
+
+Supply can grow through an exogenous compounded multiplier, default 0% annually.
+Growth applies before each year's production, including the first year.
+Editing baseline supply preserves that accumulated multiplier; reset starts
+it again at one. Generation investment costs, fuels, dispatch, grids, emissions,
+imports and renewable/fossil technology mixes are not modeled.
+
+The base quote is €0.20 per energy unit by default, not automatically indexed to
+goods inflation. The production-year quote is:
+
+`base price × (1 + scarcity response × clamp(planned demand / available supply
+− 0.8, 0, 5))`.
+
+Default scarcity sensitivity is 2. With zero supply and positive demand,
+pressure uses its upper bound; a high untraded quote is not a household CPI
+observation. No demand means no scarcity premium.
+
+Firms first forecast energy needed for their capital/inventory-based production
+plans. Available supply is reserved pro rata, not assigned to the first firm
+in the list. Hiring targets are then limited by energy quotas. Working-capital
+needs include both payroll and energy; firms must retain enough cash for both
+before hiring. Actual energy purchases exactly match actual newly produced
+goods × intensity. Unused reservations are curtailed, not resold or reallocated
+within the same year. This is a rationing rule, not an efficient spot auction.
+
+Energy costs reduce firm cash profits, business credit affordability and the
+cash available for research/dividends. They enter unit-cost pricing alongside
+payroll/research, so a shortage can raise input/goods prices even as hiring
+falls. It does not guarantee positive aggregate inflation: demand, stocks,
+funding and the existing bounded quote adjustment still matter.
+
+Firm payments transfer deposits to a domestic primary-energy provider. It starts
+with zero cash, has no bank loan or additional generating-capital asset, and
+receives the assumed resource flow without modeled extraction costs or assigned
+jobs. Default 80% of its total cash is distributed equally as household resource
+income after goods purchases; retained cash carries forward. These payments do
+not create deposits and can support demand from the following year. This is a
+simplified resource sector, not a calibrated utility business.
+
+Random shocks use a separate seeded energy RNG (5% annual chance when no shock
+is active). Default shocks remove 50% of supply for two production years,
+including the starting year. They do not randomly stack. A queued scenario
+shock pauses playback, starts next year and can refresh/extend an existing
+duration. Severity and baseline supply policies apply prospectively, not to
+history. Shocks never erase deposits, productive capital or existing goods.
+
+Annual observations reconcile both `available = used + unused` and
+`used = new goods output × intensity`. History and firm exports include
+physical use, cash bills, quotes, rationing and shock flags; JSON retains up to
+1,000 shock events, supply growth and pending/remaining shock state. Planned
+output removed by quotas is a diagnostic, **not** measured GDP loss, because
+labor or cash might also have constrained production.
+
+## Education, skills and retraining
+
+Education is a fifth discretionary allocation, default 10% of the treasury
+budget after mandatory debt service. The provider has a deposit account;
+unused cash carries forward. Funding is a transfer, not money creation.
+Provider salary/materials payments are **not** additional treasury expenditure
+on top of the appropriation.
+
+Opening provider cash funds teachers before goods firms recruit. New
+appropriations arrive later, chiefly enabling teaching from the following year.
+Candidates have 12 effective basic-study years and are ranked by skill with
+seeded tie-breaking. Teachers cannot also work for firms or study full time.
+Default annual pay is 0.5 × initial household money, indexed to opening prices.
+Teachers are assigned to funded posts; licensing, teacher training and
+utility-based career choice are not modeled.
+
+Schooling covers ages 6–17. Eligible ages 18–22 with completed secondary
+schooling choose university with default probability 30% when provider cash
+exists. Full-time students leave the labor force and cannot borrow against
+old employment income for household investment. University needs three
+**effective** study years, not automatically three calendar years. Three
+successive years below 25% quality cause dropout without a degree bonus.
+Completion/dropout changes next year's labor availability, not completed-year
+employment statistics.
+
+Unemployed adults can enter training after firm hiring (default annual chance
+30%). Teaching capacity for these courses is planned from last year's enrollment.
+Training needs two effective years, pauses during employment and can also
+complete missing secondary credits. It does not guarantee a job.
+
+Quality is the smaller of teacher coverage and funding coverage, each capped
+at one. A teacher supports 15 weighted learners by default; university counts
+as 1.5 learners. Actual salaries plus materials are compared with a default
+resource target of 0.1 × initial household money per learner, indexed to prices.
+With teachers available, 30% of remaining provider cash is offered for materials
+after other goods purchases, subject to rationing. Materials are consumed inputs,
+not capital. Enrollment without teaching/resources does not generate credits.
+
+Each effective school year adds 0.03 skill points; university completion adds
+0.4 and training completion 0.15 by default, up to an index of 3. Adults lose
+0.5% of skill annually with a floor of one. Lowering the ceiling blocks new
+gains without erasing existing education. Startup cohorts have synthetic prior
+basic schooling based on age but skill normalized to one; newborns start at
+one without schooling, qualifications or inherited skill bonuses.
+
+Firms rank applicants by skill and pay a default 40% wage premium per point
+above one. Worker productivity multiplies firm productivity by
+`1 + 0.5 × (skill − 1)` and a technology-familiarity factor. Maximum mismatch
+penalty is 20%; schooling improves familiarity gradually and completed
+university/retraining updates it to the frontier. Skills can reduce labor
+needed for existing orders, so education cannot by itself solve weak demand.
+
+Completed jobs also build skills. Each goods worker or paid teacher adds one
+tracked year of experience and gains
+`work_skill_gain × max(0, ceiling − skill) / max(ceiling − 1, epsilon)`,
+limited by remaining skill room. Default baseline gain is 0.02 points per
+working year; learning diminishes near the ceiling. Skill depreciation still
+applies, so net skills need not rise every year.
+
+Work also closes 10% of the gap to the technology actually used by the employer
+each year (the frontier for teachers). Unused frontier technology does not
+automatically become familiar to goods workers. Unemployed residents, retirees
+and full-time students gain no work experience. Experience is retained through
+job changes/unemployment, starts at zero for the simulated run rather than
+invented prior careers, and is not inherited. These are general transferable
+skills; occupation-specific experience and part-time hours are not modeled.
+
+Gains arrive **after production**, affecting future years only. Human skills
+and qualifications are not priced as financial wealth or productive capital.
+Teacher pay is household income. Participation, quality, completions, skills
+and attainment use the pre-demographic cohort. Snapshots export tracks,
+credits, skills, familiarity and employment sector (employer −1 is education).
+Scenario JSON includes retained education events (up to 1,000) and training
+capacity plans. These are illustrative conventions, not estimated returns
+to education. Private tuition, student debt and a university labor market
+are not modeled.
+
+## Business finance, failure and entry
+
+Optional bank working-capital loans require observed sales and **positive past
+cash profit**, so unfunded startups cannot borrow on fictional projections.
+Total credit is limited to 50% of past sales by default and to stressed profit
+affordability, as well as shared bank capital, reserves and money caps.
+New terms default to three years at policy rate + loan spread. Existing
+contracts keep fixed rates and constant-principal installments.
+Interest/principal payments destroy deposits; only collected interest is bank
+cash profit. Unpaid business interest is excluded from prudential capital.
+
+Unpaid maturity or consecutive missed payments trigger firm resolution.
+Operating losses with less cash than one wage for three consecutive years can
+also force exit. Inventories are offered to cash-funded rivals at a liquidation
+discount; unbought stock is explicitly scrapped. Remaining cash services loans,
+residual claims are written off against bank capital, and any cash surplus goes
+to the production holding sector. Leased capital survives. No bailout or debt
+transfer to households occurs.
+
+When active firms fall below the startup target, at most one replacement enters
+per year if working-age residents can contribute at least one baseline wage.
+Default contributions are 2% of worker cash, transferred to the entrant. These
+are modeled startup **grants**, not tracked share subscriptions; there is no
+household corporate-equity market. Firm distributions are a simplified return
+to productive-asset owners. Firms' retained equity remains in their sector.
+Entry is not guaranteed when household liquidity is exhausted.
+
+The dashboard/CSV/JSON exposes firm accounts, job assignments, demand forecasts,
+adoption, research, cash profits, business loans, entries/failures and active-firm
+sales HHI concentration. Firm events retain 1,000 entries. There is no full
+industrial sector/input-output model or legal corporate-resolution process.
 
 ## Banking
 
@@ -218,8 +477,8 @@ bond sale transfers the corresponding face-value claim, not the issuer's debt.
 Multiple loans resolve in contract order and share the resident's finite
 cash/collateral. There is no fictitious buyer or assumed full recovery.
 
-Cash-based **Bank realized profit** equals collected household loan interest
-plus coupons received on bank-held bonds, less written-off household loan
+Cash-based **Bank realized profit** equals collected household/business loan interest
+plus coupons received on bank-held bonds, less written-off household/business loan
 principal and bank-held bond principal losses. Principal repayments, loan issuance,
 unpaid interest and distributions are not income in this measure.
 Prudential equity changes by this profit minus distributions plus the separately
@@ -354,8 +613,9 @@ risks but has no observed mortality interval.
 
 Regression tests cover currency-scale-independent tax rates, the common
 collateral rule, coherent cohort mortality, euro formatting/exports and
-accounting identities under varied policy settings. Goods output equals
-consumption plus investment plus unused goods; closing capital equals
+accounting identities under varied policy settings. Opening inventories plus output
+equals consumption plus investment, education goods, closing inventories, spoilage and scrapping;
+closing capital equals
 depreciated opening capital plus public and private capital formation.
 Consolidated sector net worth equals capital valued at current prices.
 

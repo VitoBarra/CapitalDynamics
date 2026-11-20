@@ -2,7 +2,7 @@
 import altair as alt
 import pandas as pd
 import streamlit as st
-from capital_dynamics.budget import COLORS, allocation_rows
+from capital_dynamics.budget import COLORS, POLICIES, allocation_rows
 from capital_dynamics.currency import euro
 
 
@@ -13,7 +13,7 @@ def allocation_view(total, shares, spent, *, title="Policy allocation", key="bud
     data["Budget"] = "100% of policy budget"
     data["Order"] = range(len(data))
     names = data.Policy.tolist()
-    colors = alt.Scale(domain=names, range=[*COLORS[:4], COLORS[-1]])
+    colors = alt.Scale(domain=names, range=[*COLORS[:len(POLICIES)], COLORS[-1]])
     configured = data.assign(Budget="Budget allocation", Percent=data["Allocation (% of total budget)"], Amount=data.Allocated)
     plotted = configured
     if sum(spent.values()):

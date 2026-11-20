@@ -16,7 +16,9 @@ class AppTests(unittest.TestCase):
         self.assertNotIn('economic_model', [w.key for w in app.segmented_control])
         self.assertNotIn('simulation', app.session_state)
         self.assertEqual(app.session_state.monetary_simulation.step_count, 0)
-        self.assertEqual(len(app.header), 10)
+        self.assertEqual(len(app.header), 12)
+        self.assertIn("Energy and supply shocks", [item.value for item in app.header])
+        self.assertIn("Education, skills and retraining", [item.value for item in app.header])
 
     def test_reporting_and_downloads_cover_dashboard_sections(self):
         app = self.app()

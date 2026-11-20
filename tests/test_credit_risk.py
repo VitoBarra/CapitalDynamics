@@ -16,7 +16,7 @@ class CreditRiskTests(unittest.TestCase):
         return sim
 
     def assert_consolidated(self, sim):
-        self.assertAlmostEqual(sum(row["Net worth"] for row in sim.balance_sheets()), sim.capacity * sim.price)
+        self.assertAlmostEqual(sum(row["Net worth"] for row in sim.balance_sheets()), sim.real_asset_value)
         self.assertTrue(all(value >= -1e-9 for value in sim.accounts.values()))
 
     def test_collateral_and_cash_without_repayment_income_do_not_justify_lending(self):

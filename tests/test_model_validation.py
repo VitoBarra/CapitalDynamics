@@ -80,17 +80,21 @@ class ModelValidationTests(unittest.TestCase):
     def test_accounting_goods_and_capital_identities_under_varied_policies(self):
         rng = random.Random(83)
         for seed in range(12):
-            shares = [rng.random() for _ in range(4)]
+            shares = [rng.random() for _ in range(5)]
             denominator = sum(shares) + 1
             shares = [x / denominator for x in shares]
-            config = MonetaryConfig(pop_size=6, birth_prob_max=0, lending_enabled=True,
+            config = MonetaryConfig(pop_size=6, birth_prob_max=0, lending_enabled=True, business_lending=True,
                 government_borrowing=True, monetary_financing=True, issuance_per_step=2,
                 bond_term=2, loan_term=2, delta=rng.choice([0, .2, 1]),
                 death_base_prob=rng.choice([0, .01, .2]),
                 investment_risk=rng.random(), failed_investment_loss=rng.random(),
+                productivity_growth=rng.random() * .03, technology_breakthrough_probability=.3,
+                energy_supply=rng.choice([0, .5, 5, 30]), energy_shock_probability=.3,
+                energy_shock_severity=rng.choice([0, .5, 1]),
                 capital_ratio=rng.choice([0, .1, 1]), reserve_ratio=rng.choice([0, .1, 1]),
                 ubi_budget_fraction=shares[0], pension_budget_fraction=shares[1],
-                healthcare_spending_fraction=shares[2], investment_budget_fraction=shares[3])
+                healthcare_spending_fraction=shares[2], investment_budget_fraction=shares[3],
+                education_budget_fraction=shares[4])
             sim = MonetarySimulation(config, seed=seed)
             for _ in range(40):
                 before = sim.capacity
@@ -102,16 +106,20 @@ class ModelValidationTests(unittest.TestCase):
                 row = sim.history[-1]
                 with self.subTest(seed=seed, year=sim.step_count):
                     self.assertAlmostEqual(sum(x["Net worth"] for x in sim.balance_sheets()),
-                                           sim.capacity * sim.price, places=7)
-                    self.assertAlmostEqual(sim.output, row["Real consumption"] + row["Real investment"]
-                                           + sim.goods_remaining, places=7)
+                                           sim.real_asset_value, places=7)
+                    self.assertAlmostEqual(row["Opening inventories"] + sim.output,
+                                           row["Real consumption"] + row["Real investment"] + sim.goods_remaining
+                                           + row["Real education goods"]
+                                           + row["Inventory spoilage"] + row["Inventory scrapped"], places=7)
                     self.assertAlmostEqual(sim.capacity, before * (1 - config.delta)
-                                           + sim.spent["Public investment"] / sim.trade_price * config.base_eff
+                                           + row["Public capital added"]
                                            + row["Private capital added"], places=7)
                     for key in ("Money balance error", "Base money balance error", "Government balance error",
-                                "Government debt balance error"):
+                                "Government debt balance error", "Inventory balance error",
+                                "Energy balance error", "Energy input balance error"):
                         self.assertAlmostEqual(row[key], 0, places=7)
                     self.assertTrue(all(math.isfinite(x) and x >= -1e-8 for x in sim.accounts.values()))
+                    self.assertLessEqual(row["Energy used"], row["Energy available"] + 1e-8)
                     self.assertAlmostEqual(sim.prudential_equity - opening_prudential_equity,
                                            row["Bank realized profit"] - row["Bank distributions"]
                                            + row["Bank bond valuation change"], places=7)
